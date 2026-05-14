@@ -262,15 +262,29 @@ Reset to the shared root:
 |M4CD
 ```
 
-Enter a child directory:
+Enter a child directory or nested path:
 
 ```basic
 |M4CD,"GAMES"
+|M4CD,"GAMES/DIZZY"
 ```
 
-For now, `|M4CD` only accepts one child directory name at a time. Absolute paths,
-path separators, and parent traversal are rejected. To get back to root, run
-`|M4CD` with no arguments.
+Move relative to the current folder:
+
+```basic
+|M4CD,".."
+|M4CD,"../TESTS"
+```
+
+Rooted paths are relative to the shared root:
+
+```basic
+|M4CD,"/GAMES"
+```
+
+The helper normalizes `.` and `..`, case-corrects existing directory names from
+the host filesystem, and rejects traversal above the shared root. To get back to
+root, run `|M4CD` with no arguments.
 
 ## Stage 4A text file streaming
 

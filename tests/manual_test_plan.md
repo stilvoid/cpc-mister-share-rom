@@ -89,14 +89,21 @@ followed by the files and folders from the shared folder.
 |M4DIR
 |M4CD,"GAMES"
 |M4DIR
+|M4CD,"DIZZY"
+|M4DIR
+|M4CD,".."
+|M4DIR
+|M4CD,"/GAMES/DIZZY"
+|M4DIR
 |M4CD
 |M4DIR
 ```
 
 Expected:
 
-`|M4CD,"GAMES"` prints `CWD: /GAMES`, file commands resolve relative to that
-directory, and bare `|M4CD` resets to `CWD: /`.
+`|M4CD,"GAMES"` prints `CWD: /GAMES`, nested and parent paths update `CWD`
+correctly, file commands resolve relative to that directory, and bare `|M4CD`
+resets to `CWD: /`.
 
 ## Stage 4A: Type a shared text file
 

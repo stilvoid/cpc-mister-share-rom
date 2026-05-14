@@ -90,7 +90,7 @@ Implement:
 - `|M4LOADH,"FILE.BIN"` displays AMSDOS header metadata, prompts, loads the
   payload at the AMSDOS load address, and jumps to the AMSDOS entry address.
 - `|M4CD` changes the current helper directory relative to the configured
-  shared folder.
+  shared folder, with normalized nested relative paths.
 - Later, `|M4DIR` returns real folder contents through a general protocol.
 - `|CD,"path"` changes current folder.
 - `|LOAD,"file"` loads a binary or BASIC file into CPC memory.
