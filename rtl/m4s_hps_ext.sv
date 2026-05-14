@@ -27,6 +27,7 @@ module m4s_hps_ext #(
     localparam logic [7:0] CMD_REQ_STATUS = 8'h72;
     localparam logic [7:0] CMD_REQ_READ   = 8'h73;
     localparam logic [7:0] CMD_REQ_ACK    = 8'h74;
+    localparam logic [7:0] CMD_RESP_DONE  = 8'h77;
 
     wire        io_strobe = EXT_BUS[33];
     wire        io_enable = EXT_BUS[34];
@@ -89,12 +90,13 @@ module m4s_hps_ext #(
                         dir_index_begin <= 1'b1;
                     end else if (io_din[7:0] == CMD_REQ_ACK) begin
                         host_req_ack <= 1'b1;
+                    end else if (io_din[7:0] == CMD_RESP_DONE) begin
+                        dir_index_done <= 1'b1;
                     end
                 end else if (write_active) begin
                     dir_index_wr <= 1'b1;
                     dir_index_addr <= write_addr;
                     dir_index_din <= io_din[7:0];
-                    if (io_din[7:0] == 8'h00) dir_index_done <= 1'b1;
                     write_addr <= write_addr + {{(DIR_INDEX_BITS-1){1'b0}}, 1'b1};
                 end
             end

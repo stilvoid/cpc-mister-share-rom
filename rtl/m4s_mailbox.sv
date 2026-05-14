@@ -47,8 +47,6 @@ module m4s_mailbox #(
 
     localparam int DIR_INDEX_SIZE = 1 << DIR_INDEX_BITS;
     localparam int REQUEST_SIZE = 1 << REQUEST_BITS;
-    localparam logic [DIR_INDEX_BITS-1:0] DIR_INDEX_LAST = {DIR_INDEX_BITS{1'b1}};
-    localparam logic [15:0] DIR_INDEX_MAX_LEN = {{(16-DIR_INDEX_BITS){1'b0}}, DIR_INDEX_LAST} + 16'd1;
     localparam logic [REQUEST_BITS-1:0] REQUEST_LAST = {REQUEST_BITS{1'b1}};
 
     localparam logic [15:0] PING_LEN     = 16'd9;
@@ -183,12 +181,7 @@ module m4s_mailbox #(
                 dir_index_loaded <= 1'b1;
                 dir_index_ram[dir_index_addr] <= dir_index_din;
                 if (!dir_index_loaded || ({5'd0, dir_index_addr} >= dir_index_len)) begin
-                    if (dir_index_addr != DIR_INDEX_LAST) begin
-                        dir_index_len <= {5'd0, dir_index_addr} + 16'd2;
-                        dir_index_ram[dir_index_addr + {{(DIR_INDEX_BITS-1){1'b0}}, 1'b1}] <= 8'h00;
-                    end else begin
-                        dir_index_len <= DIR_INDEX_MAX_LEN;
-                    end
+                    dir_index_len <= {5'd0, dir_index_addr} + 16'd1;
                 end
             end
 

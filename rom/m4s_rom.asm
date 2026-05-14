@@ -8,6 +8,7 @@
 ;     |M4DIR
 ;     |M4TYPE,"FILE.TXT"
 ;     |M4DUMP,"FILE.BIN"
+;     |M4LOAD,"FILE.BIN"
 ;
 ; Running |HELLO prints:
 ;
@@ -22,6 +23,7 @@ KL_ROM_BASE     equ &C000
 TXT_OUTPUT      equ &BB5A                ; Firmware: print character in A.
 CHAR_CR         equ 13
 CHAR_LF         equ 10
+M4S_LOAD_ADDR   equ &4000
 
         org KL_ROM_BASE
 
@@ -51,6 +53,7 @@ rom_prefix:
         jp rsx_m4dir                     ; Entry 2: BASIC command |M4DIR.
         jp rsx_m4type                    ; Entry 3: BASIC command |M4TYPE.
         jp rsx_m4dump                    ; Entry 4: BASIC command |M4DUMP.
+        jp rsx_m4load                    ; Entry 5: BASIC command |M4LOAD.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -68,6 +71,7 @@ command_names:
         db "M4DI", &D2                   ; Entry 2: rsx_m4dir ("R" + bit 7).
         db "M4TYP", &C5                  ; Entry 3: rsx_m4type ("E" + bit 7).
         db "M4DUM", &D0                  ; Entry 4: rsx_m4dump ("P" + bit 7).
+        db "M4LOA", &C4                  ; Entry 5: rsx_m4load ("D" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -300,6 +304,168 @@ rsx_m4dump_output:
         ld e, a
         jr rsx_m4dump_loop
 
+; ---------------------------------------------------------------------------
+; |M4LOAD,"filename" RSX implementation.
+;
+; Stage 4 proof of raw binary transfer.  This loads a file from the shared
+; folder into CPC RAM at &4000 in 512-byte chunks.  Each chunk response starts
+; with a little-endian 16-bit byte count followed by raw file data.
+; ---------------------------------------------------------------------------
+rsx_m4load:
+        cp 1
+        jr z, rsx_m4load_have_param
+        ld hl, msg_load_usage
+        call print_string
+        ret
+
+rsx_m4load_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4load_nonempty
+        ld hl, msg_load_usage
+        call print_string
+        ret
+
+rsx_m4load_nonempty:
+        ld hl, M4S_LOAD_ADDR             ; HL = destination pointer.
+        ld de, 0                         ; DE = file offset for next chunk.
+
+rsx_m4load_chunk:
+        call m4load_send_request
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        call m4load_read_byte
+        jr nc, rsx_m4load_error
+        ld c, a
+        call m4load_read_byte
+        jr nc, rsx_m4load_error
+        ld b, a                          ; BC = returned byte count.
+
+        ld a, b
+        cp 3
+        jr nc, rsx_m4load_error          ; Refuse counts above 512 bytes.
+        cp 2
+        jr nz, rsx_m4load_count_valid
+        ld a, c
+        or a
+        jr nz, rsx_m4load_error
+
+rsx_m4load_count_valid:
+        ld a, b
+        or c
+        jr z, rsx_m4load_done
+
+rsx_m4load_write_loop:
+        call m4load_read_byte
+        jr nc, rsx_m4load_error
+        ld (hl), a
+        inc hl
+        inc de
+        dec bc
+        ld a, b
+        or c
+        jr nz, rsx_m4load_write_loop
+
+        ld a, d                          ; Stop if the 16-bit proof offset
+        or e                             ; wraps around at 64KB.
+        jr z, rsx_m4load_done
+
+        jr rsx_m4load_chunk
+
+rsx_m4load_done:
+        ld hl, msg_load_done
+        call print_string
+        ret
+
+rsx_m4load_error:
+        ld hl, msg_load_error
+        call print_string
+        ret
+
+; Read one mailbox byte while preserving the active chunk state in HL/BC/DE.
+m4load_read_byte:
+        push hl
+        push bc
+        push de
+        call mailbox_read_byte
+        pop de
+        pop bc
+        pop hl
+        ret
+
+; Send request "L:OOOO:filename", where OOOO is the 16-bit file offset in DE.
+m4load_send_request:
+        push hl
+        push de
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "L"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        ld a, d
+        call m4load_send_hex_byte
+        ld a, e
+        call m4load_send_hex_byte
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld b, (hl)                       ; B = filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = filename data.
+
+m4load_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz m4load_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop de
+        pop hl
+        ret
+
+m4load_send_hex_byte:
+        push af
+        rrca
+        rrca
+        rrca
+        rrca
+        call m4load_send_hex_nibble
+        pop af
+
+m4load_send_hex_nibble:
+        and &0F
+        add a, "0"
+        cp "9" + 1
+        jr c, m4load_send_hex_digit
+        add a, 7
+
+m4load_send_hex_digit:
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        ret
+
 ; Wait for one byte from the mailbox.
 ;
 ; Carry set:   A contains a byte read from DATA.
@@ -346,13 +512,22 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.1 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.2 installed", 13, 10, 13, 10, 0
 
 msg_type_usage:
         db "Usage: |M4TYPE,", 34, "FILE.TXT", 34, 13, 10, 0
 
 msg_dump_usage:
         db "Usage: |M4DUMP,", 34, "FILE.BIN", 34, 13, 10, 0
+
+msg_load_usage:
+        db "Usage: |M4LOAD,", 34, "FILE.BIN", 34, 13, 10, 0
+
+msg_load_done:
+        db "Loaded at &4000", 13, 10, 0
+
+msg_load_error:
+        db "Load failed", 13, 10, 0
 
 ; Expansion ROM images are 16KB.  Pad unused space with &FF, the normal erased
 ; EPROM byte value.  The build script assembles this as a raw binary suitable

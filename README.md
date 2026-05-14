@@ -9,7 +9,8 @@ adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory index
 through MiSTer's existing file download path. Stage 3B adds a custom
 Main_MiSTer hook that serves live `shared` folder listings on demand through
 `EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"` and
-`|M4DUMP,"FILE.BIN"`.
+`|M4DUMP,"FILE.BIN"`, then adds a first chunked binary load proof with
+`|M4LOAD,"FILE.BIN"`.
 
 ## Stage 1-4 status
 
@@ -19,7 +20,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.1 installed
+ M4S ROM Stage 4.2 installed
 
 ```
 
@@ -70,6 +71,8 @@ GAMES
 - A read-only `|M4DUMP,"FILE.BIN"` proof that asks Main_MiSTer to read a file
   and return an ASCII hex dump, avoiding zero-byte framing issues while testing
   binary reads.
+- A proof `|M4LOAD,"FILE.BIN"` command that loads raw bytes from the shared
+  folder into CPC RAM at `&4000` using 512-byte chunks.
 
 Not implemented yet:
 
@@ -263,6 +266,20 @@ The current mailbox stream is zero-terminated, so `|M4DUMP` does not stream raw
 binary bytes to the CPC yet. Main_MiSTer reads the binary file and formats the
 response as hex rows. The dump is capped by the same 2048-byte stream buffer.
 
+## Stage 4C binary load proof
+
+`|M4LOAD` loads a shared binary file into CPC RAM at `&4000`:
+
+```basic
+|M4LOAD,"FILE.BIN"
+```
+
+Main_MiSTer returns raw file chunks with a two-byte little-endian byte count
+followed by up to 512 bytes of data. Unlike the text commands, this response is
+length-aware and can carry `00` bytes. The current ROM command is still a proof:
+the destination address is fixed at `&4000`, the request offset is 16-bit, and
+large files should be kept below the available CPC RAM range.
+
 ## Testing `|HELLO` in BASIC
 
 1. Build the ROM:
@@ -274,7 +291,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.1 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.2 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 
