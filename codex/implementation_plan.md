@@ -76,42 +76,176 @@ Acceptance:
 - With the custom Main_MiSTer binary installed, `|M4DIR` prints a live-ish
   listing of the configured shared folder without manually loading an index.
 
-## Stage 4: Real file commands
+## Stage 4: Direct shared-folder proof commands
 
-Implement:
+Status: implemented and manually tested.
 
 - `|M4TYPE,"FILE.TXT"` streams a small text file from the shared folder.
-- `|M4DUMP,"FILE.BIN"` dumps a binary file as ASCII hex, proving binary file
-  reads before the mailbox can carry raw zero bytes.
+- `|M4DUMP,"FILE.BIN"` dumps a binary file as ASCII hex.
 - `|M4INFO,"FILE.BIN"` reports file size and AMSDOS header metadata.
 - `|M4LOAD,"FILE.BIN"` and `|M4LOAD,"FILE.BIN",&8000` load raw binary chunks
-  into RAM, proving length-aware binary responses and chunked reads larger than
-  the mailbox.
+  into CPC RAM.
 - `|M4LOADH,"FILE.BIN"` displays AMSDOS header metadata, prompts, loads the
-  payload at the AMSDOS load address, and jumps to the AMSDOS entry address.
+  payload at the AMSDOS load address, and jumps to the AMSDOS entry address for
+  binary files.
 - `|M4CD` changes the current helper directory relative to the configured
   shared folder, with normalized nested relative paths.
 - `|M4SAVE,"FILE.BIN",&4000,&0100` saves a CPC memory range to the current
-  shared folder, proving CPC-to-host file writes.
-- Later, `|M4DIR` returns real folder contents through a general protocol.
-- `|CD,"path"` changes current folder.
-- `|LOAD,"file"` loads a binary or BASIC file into CPC memory.
-- `|SAVE,"file"` writes bytes back.
+  shared folder.
 
-Define exact BASIC/AMSDOS semantics before promising compatibility.
+## Stage 5: Stabilise the direct file protocol
 
-First route:
+Goal: turn the Stage 4 proof protocol into a reusable file transport before
+adding higher-level commands.
 
-- Buffer the filename in the FPGA mailbox.
-- Let Main_MiSTer poll the request over `EXT_BUS`.
-- Read the file from the resolved shared folder and push the file contents into
-  the existing stream buffer.
+Implement:
 
-## Stage 5: Polish
+- A single request grammar for open/read/write/close/stat commands, replacing
+  one-off string prefixes where practical.
+- Explicit status codes for OK, not found, bad path, permission denied, exists,
+  short read/write, disk full, and unsupported operation.
+- Length-aware request payloads for CPC-to-host writes, so binary save paths no
+  longer need ASCII-hex expansion.
+- Larger or streaming host responses where needed, while keeping each CPC-side
+  chunk small enough to avoid ROM workspace pressure.
+- Shared path validation in one host-side helper used by every command.
+- A documented overwrite policy. Default should be conservative: refuse to
+  overwrite unless the RSX explicitly asks for it.
 
-- Wildcards.
-- File type handling.
-- AMSDOS-like transparent `LOAD`, `SAVE`, `CAT`.
+Acceptance:
+
+- `|M4LOAD`, `|M4LOADH`, `|M4SAVE`, `|M4TYPE`, `|M4DUMP`, and `|M4INFO` still
+  pass their manual tests after moving to the common transport.
+- Error messages are deterministic enough to debug from the CPC screen.
+
+## Stage 6: BASIC program save/load helpers
+
+Goal: make shared-folder storage useful for ordinary BASIC workflows without
+requiring AMSDOS interception yet.
+
+Implement:
+
+- `|M4SAVEB,"NAME.BAS"` saves the current BASIC program to the shared folder.
+- `|M4LOADB,"NAME.BAS"` loads a BASIC program from the shared folder and leaves
+  it ready for `RUN`.
+- Decide and document whether the shared file format is:
+  - AMSDOS-headered tokenised BASIC, preferred for CPC tooling compatibility.
+  - Headerless tokenised BASIC, simpler but less compatible.
+  - ASCII BASIC, useful later but not the first target.
+- Generate and validate AMSDOS headers for BASIC files, including checksum,
+  logical length, load address, and file type.
+- Preserve the existing direct binary commands separately. Do not overload
+  `|M4LOADH` with BASIC-specific assumptions beyond its current type-aware
+  behavior.
+
+Acceptance:
+
+- Type a small BASIC program, run `|M4SAVEB,"TEST.BAS"`, reset the CPC, run
+  `|M4LOADB,"TEST.BAS"`, then `RUN`.
+- The saved file should be inspectable with `|M4INFO` and show a valid AMSDOS
+  BASIC header.
+
+## Stage 7: Copy shared files to a mounted CPC disk
+
+Goal: copy from the shared folder into the currently mounted AMSDOS disk image.
+
+Preferred route:
+
+- Use CPC firmware/AMSDOS file APIs from the ROM side so the mounted disk image
+  is updated by the existing CPC disk stack.
+- Add `|M4TODISC,"SHARED.BIN","DISCNAME.BIN"` or similar.
+- Read the shared file from Main_MiSTer in chunks.
+- Open the destination file through AMSDOS, write chunks, then close it.
+- For AMSDOS-headered shared files, write the correct logical payload and file
+  metadata for the target file type.
+
+Risks to investigate first:
+
+- Exact firmware entry points and register contracts for creating/writing files
+  from a background ROM.
+- How AMSDOS handles headers when writing via firmware calls.
+- Whether ROM paging or low-memory workspace conflicts appear during file I/O.
+
+Acceptance:
+
+- Copy a small headerless binary from shared to disk and verify it appears in
+  `CAT`.
+- Copy an AMSDOS-headered BASIC or binary file from shared to disk and verify it
+  can be loaded or run from the disk with standard AMSDOS commands.
+
+## Stage 8: Copy mounted CPC disk files to shared
+
+Goal: export files from the currently mounted AMSDOS disk image into the shared
+folder.
+
+Preferred route:
+
+- Add `|M4FROMDISC,"DISCNAME.BIN","SHARED.BIN"` or similar.
+- Open and read the source file through AMSDOS from the ROM side.
+- Send file bytes to Main_MiSTer using the write transport from Stage 5.
+- Preserve AMSDOS metadata where possible, preferably by writing a valid
+  AMSDOS-headered file to shared.
+
+Risks to investigate first:
+
+- Whether AMSDOS exposes enough metadata to reconstruct the header cleanly.
+- How to handle protected BASIC, binary entry addresses, and ASCII files.
+- Error recovery if the host write fails after the AMSDOS read has started.
+
+Acceptance:
+
+- Copy a disk BASIC program to shared, reset, load it back from shared, and run
+  it.
+- Copy a disk binary to shared and verify `|M4INFO` reports sensible metadata.
+
+## Stage 9: File management helpers
+
+Goal: make the shared folder usable without leaving the CPC.
+
+Implement after copy/save/load are stable:
+
+- `|M4MKDIR,"DIR"` to create directories.
+- `|M4REN,"OLD","NEW"` to rename a file or directory.
+- `|M4DEL,"FILE"` to delete a file, with conservative confirmation or explicit
+  force syntax.
+- Optional `|M4PWD` if `|M4DIR` output becomes too dense.
+- Directory listing improvements: sizes, file type hints, and long-name display
+  that remains readable on a CPC screen.
+
+Acceptance:
+
+- Each operation updates the next `|M4DIR` result immediately and refuses paths
+  outside the shared root.
+
+## Stage 10: AMSDOS interception and compatibility layer
+
+Goal: evaluate whether the direct helper can become transparent enough for
+normal `LOAD`, `SAVE`, `CAT`, and eventually SymbOS-like mass storage use.
+
+Investigate:
+
+- CPC firmware and AMSDOS hook points for transparent file operation
+  interception.
+- ROM slot ordering requirements relative to AMSDOS.
+- The M4 ROM behavior and command/API surface from:
+  https://github.com/M4Duke/m4rom
+- Whether direct RSX helpers are enough for a useful standalone shared-folder
+  feature even if full M4 compatibility remains separate.
+
+Possible outcomes:
+
+- Keep this as a MiSTer-specific shared-folder ROM with explicit `|M4...`
+  commands.
+- Add AMSDOS-like aliases for common operations.
+- Add a compatibility shim for selected M4 APIs needed by real software.
+- Define a cleaner FPGA mass-storage API and document it for interested CPC or
+  SymbOS developers.
+
+## Stage 11: Polish
+
+- Wildcards and pattern matching.
+- Read-only mode for safer testing.
+- Optional overwrite confirmation modes.
 - Optional M4-compatible command aliases.
 - Optional network later, as a separate architecture decision.
 
