@@ -3,16 +3,17 @@
 Experimental scaffold for adding a folder-backed mass-storage device to the
 MiSTer Amstrad CPC core.
 
-This is deliberately not a full M4 clone. Stage 1 was only a tiny CPC expansion
-ROM that proves the CPC can see the ROM and dispatch an RSX command. Stage 2
-adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory index
-through MiSTer's existing file download path. Stage 3B adds a custom
+This is deliberately not a full M4 clone. The goal is a MiSTer-specific shared
+folder system controlled by explicit RSX commands. Stage 1 was only a tiny CPC
+expansion ROM that proves the CPC can see the ROM and dispatch an RSX command.
+Stage 2 adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory
+index through MiSTer's existing file download path. Stage 3B adds a custom
 Main_MiSTer hook that serves live `shared` folder listings on demand through
 `EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"` and
 `|M4DUMP,"FILE.BIN"`, adds `|M4INFO,"FILE.BIN"` for AMSDOS header diagnostics,
 then adds a first chunked binary load proof with `|M4LOAD,"FILE.BIN"`. Stage
-4.5 adds `|M4CD` navigation within the shared folder. Stage 4.6 adds a first
-raw memory save proof with `|M4SAVE,"FILE.BIN",&4000,&0100`.
+4.5 adds `|M4CD` navigation within the shared folder. Stage 4.6 adds a first raw
+memory save proof with `|M4SAVE,"FILE.BIN",&4000,&0100`.
 
 ## Stage 1-4 status
 
@@ -87,12 +88,9 @@ GAMES
 Not implemented yet:
 
 - General file open/read/write commands beyond the proof RSX helpers.
-- AMSDOS interception.
-- M4 compatibility.
-
-Future M4 compatibility reference:
-
-- M4 board ROM source: <https://github.com/M4Duke/m4rom>
+- BASIC program save/load helpers.
+- Explicit copy commands between the shared folder and a mounted CPC disk.
+- File management helpers such as mkdir, rename, and delete.
 
 ## How CPC expansion ROMs work
 

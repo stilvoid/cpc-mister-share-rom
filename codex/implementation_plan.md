@@ -2,7 +2,12 @@
 
 ## Context
 
-We are modifying `MiSTer-devel/Amstrad_MiSTer` to add an experimental folder-backed mass-storage device for the CPC. Do not implement the full M4 board. Do not emulate STM32 or ESP8266. First goal is a minimal expansion ROM. The FPGA mailbox comes after the ROM smoke test is proven.
+We are modifying `MiSTer-devel/Amstrad_MiSTer` to add an experimental
+folder-backed shared storage device for the CPC. The project goal is a useful
+MiSTer-specific shared-folder system controlled by explicit RSX commands. Do not
+implement the full M4 board, do not emulate STM32 or ESP8266, and do not target
+transparent AMSDOS interception. First goal is a minimal expansion ROM. The FPGA
+mailbox comes after the ROM smoke test is proven.
 
 The Amstrad MiSTer README says the core already supports selectable expansion ROM loading and `.eXX` expansion ROM files. Use that existing mechanism for the ROM.
 
@@ -120,8 +125,8 @@ Acceptance:
 
 ## Stage 6: BASIC program save/load helpers
 
-Goal: make shared-folder storage useful for ordinary BASIC workflows without
-requiring AMSDOS interception yet.
+Goal: make shared-folder storage useful for ordinary BASIC workflows through
+explicit RSX commands.
 
 Implement:
 
@@ -217,38 +222,17 @@ Acceptance:
 - Each operation updates the next `|M4DIR` result immediately and refuses paths
   outside the shared root.
 
-## Stage 10: AMSDOS interception and compatibility layer
-
-Goal: evaluate whether the direct helper can become transparent enough for
-normal `LOAD`, `SAVE`, `CAT`, and eventually SymbOS-like mass storage use.
-
-Investigate:
-
-- CPC firmware and AMSDOS hook points for transparent file operation
-  interception.
-- ROM slot ordering requirements relative to AMSDOS.
-- The M4 ROM behavior and command/API surface from:
-  https://github.com/M4Duke/m4rom
-- Whether direct RSX helpers are enough for a useful standalone shared-folder
-  feature even if full M4 compatibility remains separate.
-
-Possible outcomes:
-
-- Keep this as a MiSTer-specific shared-folder ROM with explicit `|M4...`
-  commands.
-- Add AMSDOS-like aliases for common operations.
-- Add a compatibility shim for selected M4 APIs needed by real software.
-- Define a cleaner FPGA mass-storage API and document it for interested CPC or
-  SymbOS developers.
-
-## Stage 11: Polish
+## Stage 10: Polish the RSX shared-folder system
 
 - Wildcards and pattern matching.
 - Read-only mode for safer testing.
 - Optional overwrite confirmation modes.
-- Optional M4-compatible command aliases.
+- Consistent command naming and help text.
+- Optional short aliases for common RSX commands if ROM space allows.
 - Optional network later, as a separate architecture decision.
 
-Future compatibility reference:
+Non-goals:
 
-- M4 board ROM source: https://github.com/M4Duke/m4rom
+- Transparent interception of normal `LOAD`, `SAVE`, or `CAT`.
+- M4 board compatibility or selected M4 API emulation.
+- SymbOS mass-storage compatibility.
