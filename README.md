@@ -11,7 +11,8 @@ Main_MiSTer hook that serves live `shared` folder listings on demand through
 `EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"` and
 `|M4DUMP,"FILE.BIN"`, adds `|M4INFO,"FILE.BIN"` for AMSDOS header diagnostics,
 then adds a first chunked binary load proof with `|M4LOAD,"FILE.BIN"`. Stage
-4.5 adds `|M4CD` navigation within the shared folder.
+4.5 adds `|M4CD` navigation within the shared folder. Stage 4.6 adds a first
+raw memory save proof with `|M4SAVE,"FILE.BIN",&4000,&0100`.
 
 ## Stage 1-4 status
 
@@ -21,7 +22,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.5 installed
+ M4S ROM Stage 4.6 installed
 
 ```
 
@@ -80,10 +81,12 @@ GAMES
 - A deliberately dangerous `|M4LOADH,"FILE.BIN"` command that displays AMSDOS
   header info, prompts for confirmation, loads the payload at the AMSDOS load
   address, and jumps to the AMSDOS entry address.
+- A proof `|M4SAVE,"FILE.BIN",&4000,&0100` command that saves a CPC memory
+  range to a file in the current shared folder using small ASCII-hex chunks.
 
 Not implemented yet:
 
-- General file open/read/write commands.
+- General file open/read/write commands beyond the proof RSX helpers.
 - AMSDOS interception.
 - M4 compatibility.
 
@@ -254,7 +257,7 @@ Directory names are suffixed with `/`. The listing is capped to the same
 
 The helper maintains a current directory relative to the configured `shared`
 folder. The current directory affects `|M4DIR`, `|M4TYPE`, `|M4DUMP`,
-`|M4INFO`, `|M4LOAD`, and `|M4LOADH`.
+`|M4INFO`, `|M4LOAD`, `|M4LOADH`, and `|M4SAVE`.
 
 Reset to the shared root:
 
@@ -367,6 +370,20 @@ load address before jumping to the AMSDOS entry address. This can overwrite low
 memory and reset or crash the CPC if the program expects a different runtime
 environment.
 
+## Stage 4F raw memory save
+
+`|M4SAVE` writes a CPC memory range to the current shared folder:
+
+```basic
+|M4SAVE,"FILE.BIN",&4000,&0100
+```
+
+The first numeric argument is the CPC source address and the second is the byte
+length. The ROM currently sends 64-byte chunks encoded as ASCII hex, which keeps
+the write proof compatible with the existing zero-terminated mailbox request
+buffer. Offset handling is still 16-bit, so this is a proof command rather than
+a general large-file save API.
+
 ## Testing `|HELLO` in BASIC
 
 1. Build the ROM:
@@ -378,7 +395,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.5 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.6 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 

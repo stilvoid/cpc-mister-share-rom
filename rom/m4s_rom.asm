@@ -14,6 +14,7 @@
 ;     |M4LOAD,"FILE.BIN"
 ;     |M4LOAD,"FILE.BIN",&8000
 ;     |M4LOADH,"FILE.BIN"
+;     |M4SAVE,"FILE.BIN",&4000,&0100
 ;
 ; Running |HELLO prints:
 ;
@@ -63,6 +64,7 @@ rom_prefix:
         jp rsx_m4info                    ; Entry 6: BASIC command |M4INFO.
         jp rsx_m4loadh                   ; Entry 7: BASIC command |M4LOADH.
         jp rsx_m4cd                      ; Entry 8: BASIC command |M4CD.
+        jp rsx_m4save                    ; Entry 9: BASIC command |M4SAVE.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -84,6 +86,7 @@ command_names:
         db "M4INF", &CF                  ; Entry 6: rsx_m4info ("O" + bit 7).
         db "M4LOAD", &C8                 ; Entry 7: rsx_m4loadh ("H" + bit 7).
         db "M4C", &C4                    ; Entry 8: rsx_m4cd ("D" + bit 7).
+        db "M4SAV", &C5                  ; Entry 9: rsx_m4save ("E" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -494,6 +497,102 @@ rsx_m4info_output:
         jr rsx_m4info_loop
 
 ; ---------------------------------------------------------------------------
+; |M4SAVE,"filename",&addr,&length RSX implementation.
+;
+; Stage 4 write proof.  This saves a CPC memory range to a file in the current
+; shared folder.  The CPC sends 64-byte chunks encoded as ASCII hex so the
+; current zero-terminated mailbox request framing can carry arbitrary bytes.
+; ---------------------------------------------------------------------------
+rsx_m4save:
+        cp 3
+        jr z, rsx_m4save_have_params
+        ld hl, msg_save_usage
+        call print_string
+        ret
+
+rsx_m4save_have_params:
+        ld l, (ix+4)
+        ld h, (ix+5)                     ; HL = filename string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4save_nonempty
+        ld hl, msg_save_usage
+        call print_string
+        ret
+
+rsx_m4save_nonempty:
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = source memory pointer.
+        ld c, (ix+0)
+        ld b, (ix+1)                     ; BC = bytes left to save.
+        ld a, b
+        or c
+        jr nz, rsx_m4save_start
+        ld hl, msg_save_usage
+        call print_string
+        ret
+
+rsx_m4save_start:
+        ld de, 0                         ; DE = file offset for next chunk.
+
+rsx_m4save_chunk:
+        ld a, b
+        or a
+        jr nz, rsx_m4save_chunk_64
+        ld a, c
+        cp 65
+        jr c, rsx_m4save_chunk_ready
+
+rsx_m4save_chunk_64:
+        ld a, 64
+
+rsx_m4save_chunk_ready:
+        call m4save_send_request
+        push af
+
+        push bc
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+        pop bc
+
+        call m4load_read_byte
+        jr nc, rsx_m4save_response_error
+        cp "O"
+        jr nz, rsx_m4save_response_error
+
+        pop af
+rsx_m4save_advance:
+        inc hl
+        inc de
+        dec bc
+        dec a
+        jr nz, rsx_m4save_advance
+
+        ld a, b
+        or c
+        jr z, rsx_m4save_done
+
+        ld a, d                          ; Stop if the 16-bit proof offset
+        or e                             ; wraps around at 64KB.
+        jr z, rsx_m4save_error
+
+        jr rsx_m4save_chunk
+
+rsx_m4save_response_error:
+        pop af
+
+rsx_m4save_error:
+        ld hl, msg_save_error
+        call print_string
+        ret
+
+rsx_m4save_done:
+        ld hl, msg_save_done
+        call print_string
+        ret
+
+; ---------------------------------------------------------------------------
 ; |M4LOAD,"filename" RSX implementation.
 ;
 ; Stage 4 proof of raw binary transfer.  This loads a file from the shared
@@ -893,6 +992,86 @@ m4loadh_send_name:
         pop hl
         ret
 
+; Send request "S:OOOO:NN:filename:HEX", where OOOO is the 16-bit file offset
+; in DE and NN is the chunk length in A.
+m4save_send_request:
+        push hl
+        push de
+        push bc
+        push af
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "S"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        ld a, d
+        call m4load_send_hex_byte
+        ld a, e
+        call m4load_send_hex_byte
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop af
+        push af
+        call m4load_send_hex_byte
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld l, (ix+4)
+        ld h, (ix+5)                     ; HL = filename string descriptor.
+        ld b, (hl)                       ; B = filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = filename data.
+
+m4save_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz m4save_send_name
+
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop af
+        pop bc
+        pop de
+        pop hl
+        push hl
+        push de
+        push bc
+        push af
+
+        ld e, a
+
+m4save_send_data:
+        ld a, (hl)
+        call m4load_send_hex_byte
+        inc hl
+        dec e
+        jr nz, m4save_send_data
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop af
+        pop bc
+        pop de
+        pop hl
+        ret
+
 ; Wait for one byte from the mailbox.
 ;
 ; Carry set:   A contains a byte read from DATA.
@@ -939,7 +1118,7 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.5 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.6 installed", 13, 10, 13, 10, 0
 
 msg_cd_usage:
         db "Usage: |M4CD,", 34, "DIR", 34, 13, 10, 0
@@ -961,6 +1140,15 @@ msg_load_done:
 
 msg_load_error:
         db "Load failed", 13, 10, 0
+
+msg_save_usage:
+        db "Usage: |M4SAVE,", 34, "FILE.BIN", 34, ",&4000,&0100", 13, 10, 0
+
+msg_save_done:
+        db "Saved", 13, 10, 0
+
+msg_save_error:
+        db "Save failed", 13, 10, 0
 
 msg_loadh_usage:
         db "Usage: |M4LOADH,", 34, "FILE.BIN", 34, 13, 10, 0

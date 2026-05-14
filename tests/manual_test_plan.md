@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.5 installed
+ M4S ROM Stage 4.6 installed
 
 ```
 
@@ -205,6 +205,25 @@ The command prints file metadata, prompts for confirmation, then loads the
 payload at the AMSDOS load address and jumps to the AMSDOS entry address when
 you press `Y`.
 
+## Stage 4F: Save a memory range to the shared folder
+
+1. Install the matching custom Main_MiSTer binary and ROM.
+2. Start the Amstrad core and put a recognizable byte pattern in memory.
+3. Run:
+
+```basic
+|M4SAVE,"OUT.BIN",&4000,&0100
+```
+
+Expected:
+
+```text
+Saved
+```
+
+Confirm `OUT.BIN` appears in the current shared folder and compare it with the
+bytes at `&4000`. `|M4DUMP,"OUT.BIN"` should show the saved data too.
+
 ## Debug hints
 
 - If `|HELLO` is unknown, debug ROM header/RSX registration first.
@@ -213,6 +232,6 @@ you press `Y`.
 - If `|M4DIR` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If live listing does not update, confirm the custom Main_MiSTer binary is
   running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|M4CD`, `|M4TYPE`, `|M4DUMP`, `|M4INFO`, `|M4LOAD`, or `|M4LOADH` hangs, check the CPC-to-HPS request status path in
+- If `|M4CD`, `|M4TYPE`, `|M4DUMP`, `|M4INFO`, `|M4LOAD`, `|M4LOADH`, or `|M4SAVE` hangs, check the CPC-to-HPS request status path in
   `m4s_mailbox` and `m4s_hps_ext`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.

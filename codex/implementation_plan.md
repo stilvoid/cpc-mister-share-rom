@@ -91,6 +91,8 @@ Implement:
   payload at the AMSDOS load address, and jumps to the AMSDOS entry address.
 - `|M4CD` changes the current helper directory relative to the configured
   shared folder, with normalized nested relative paths.
+- `|M4SAVE,"FILE.BIN",&4000,&0100` saves a CPC memory range to the current
+  shared folder, proving CPC-to-host file writes.
 - Later, `|M4DIR` returns real folder contents through a general protocol.
 - `|CD,"path"` changes current folder.
 - `|LOAD,"file"` loads a binary or BASIC file into CPC memory.
