@@ -92,6 +92,14 @@ Not implemented yet:
 - Explicit copy commands between the shared folder and a mounted CPC disk.
 - File management helpers such as mkdir, rename, and delete.
 
+Planned user-facing commands should drop the proof `M4` prefix and use
+Unix-like RSX names where they do not collide with common CPC disk ROMs. The
+current `M4*` commands remain useful fallbacks while the short names settle.
+Avoid `|DIR`, `|ERA`, and `|REN` as primary names because AMSDOS already uses
+them. Preferred future names are `|ls`, `|cd`, `|pwd`, `|cat`, `|stat`,
+`|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|cp`, `|mkdir`,
+`|mv`, and `|rm`.
+
 ## How CPC expansion ROMs work
 
 The Amstrad CPC maps expansion ROMs into the upper 16KB address range,

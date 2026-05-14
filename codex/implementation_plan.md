@@ -123,15 +123,72 @@ Acceptance:
   pass their manual tests after moving to the common transport.
 - Error messages are deterministic enough to debug from the CPC screen.
 
-## Stage 6: BASIC program save/load helpers
+## Stage 6: User-facing RSX command names
+
+Goal: move from proof-oriented `M4*` command names to a small, memorable
+Unix-like command set for the shared folder system.
+
+Known collision constraints:
+
+- Avoid `|DIR`, `|ERA`, and `|REN` as primary names because AMSDOS owns those
+  RSXs on disk systems.
+- Avoid one-letter drive-like names such as `|A` and `|B`.
+- Treat all short generic names as best-effort. Other expansion ROMs can define
+  their own RSXs, so keep a namespaced fallback while the interface settles.
+
+Preferred primary names:
+
+- `|ls` lists the current shared folder.
+- `|cd,"path"` changes the current shared folder directory.
+- `|pwd` prints the current shared folder directory.
+- `|cat,"file"` prints a text file.
+- `|hexdump,"file"` or `|xxd,"file"` dumps binary data as hex.
+- `|stat,"file"` shows file size and AMSDOS header metadata.
+- `|loadm,"file",&4000` loads a raw shared file into CPC memory.
+- `|savem,"file",&4000,&0100` saves a CPC memory range to shared.
+- `|exec,"file"` loads an AMSDOS-headered binary and jumps to its entry point
+  when appropriate.
+- `|saveb,"file.bas"` saves the current BASIC program to shared.
+- `|loadb,"file.bas"` loads a BASIC program from shared.
+- `|cp,"src","dst"` copies between shared paths and mounted CPC disk paths once
+  disk copy support exists.
+- `|mkdir,"dir"`, `|mv,"old","new"`, and `|rm,"file"` provide file management.
+
+Path convention for `|cp`:
+
+- Plain paths refer to the current shared folder.
+- Rooted paths such as `/games/dizzy.bin` are rooted at the shared folder.
+- Disk paths are explicit, for example `a:discfile.bin` or `b:discfile.bin`.
+- Examples:
+  - `|cp,"hello.bas","a:hello.bas"` copies shared to disk.
+  - `|cp,"a:hello.bas","hello.bas"` copies disk to shared.
+  - `|cp,"old.bin","backup/old.bin"` copies within shared.
+
+Transition plan:
+
+- Keep the existing `M4*` commands as fallbacks while adding aliases.
+- Once aliases are stable, update documentation and manual tests to prefer the
+  Unix-like names.
+- Only remove `M4*` aliases if ROM space becomes tight and after the short names
+  have been tested with common ROM slot configurations.
+
+Acceptance:
+
+- The command table can register the preferred aliases without breaking the
+  existing tested `M4*` commands.
+- `|ls`, `|cd`, `|cat`, `|stat`, `|loadm`, `|savem`, and `|exec` pass the same
+  manual tests as their current `M4*` equivalents.
+- A short note documents known AMSDOS-owned command names to avoid.
+
+## Stage 7: BASIC program save/load helpers
 
 Goal: make shared-folder storage useful for ordinary BASIC workflows through
 explicit RSX commands.
 
 Implement:
 
-- `|M4SAVEB,"NAME.BAS"` saves the current BASIC program to the shared folder.
-- `|M4LOADB,"NAME.BAS"` loads a BASIC program from the shared folder and leaves
+- `|saveb,"NAME.BAS"` saves the current BASIC program to the shared folder.
+- `|loadb,"NAME.BAS"` loads a BASIC program from the shared folder and leaves
   it ready for `RUN`.
 - Decide and document whether the shared file format is:
   - AMSDOS-headered tokenised BASIC, preferred for CPC tooling compatibility.
@@ -145,12 +202,12 @@ Implement:
 
 Acceptance:
 
-- Type a small BASIC program, run `|M4SAVEB,"TEST.BAS"`, reset the CPC, run
-  `|M4LOADB,"TEST.BAS"`, then `RUN`.
+- Type a small BASIC program, run `|saveb,"TEST.BAS"`, reset the CPC, run
+  `|loadb,"TEST.BAS"`, then `RUN`.
 - The saved file should be inspectable with `|M4INFO` and show a valid AMSDOS
   BASIC header.
 
-## Stage 7: Copy shared files to a mounted CPC disk
+## Stage 8: Copy shared files to a mounted CPC disk
 
 Goal: copy from the shared folder into the currently mounted AMSDOS disk image.
 
@@ -158,7 +215,7 @@ Preferred route:
 
 - Use CPC firmware/AMSDOS file APIs from the ROM side so the mounted disk image
   is updated by the existing CPC disk stack.
-- Add `|M4TODISC,"SHARED.BIN","DISCNAME.BIN"` or similar.
+- Add `|cp,"SHARED.BIN","A:DISCNAME.BIN"`.
 - Read the shared file from Main_MiSTer in chunks.
 - Open the destination file through AMSDOS, write chunks, then close it.
 - For AMSDOS-headered shared files, write the correct logical payload and file
@@ -178,14 +235,15 @@ Acceptance:
 - Copy an AMSDOS-headered BASIC or binary file from shared to disk and verify it
   can be loaded or run from the disk with standard AMSDOS commands.
 
-## Stage 8: Copy mounted CPC disk files to shared
+## Stage 9: Copy mounted CPC disk files to shared
 
 Goal: export files from the currently mounted AMSDOS disk image into the shared
 folder.
 
 Preferred route:
 
-- Add `|M4FROMDISC,"DISCNAME.BIN","SHARED.BIN"` or similar.
+- Use the same `|cp` command with source and destination reversed, for example
+  `|cp,"A:DISCNAME.BIN","SHARED.BIN"`.
 - Open and read the source file through AMSDOS from the ROM side.
 - Send file bytes to Main_MiSTer using the write transport from Stage 5.
 - Preserve AMSDOS metadata where possible, preferably by writing a valid
@@ -203,17 +261,17 @@ Acceptance:
   it.
 - Copy a disk binary to shared and verify `|M4INFO` reports sensible metadata.
 
-## Stage 9: File management helpers
+## Stage 10: File management helpers
 
 Goal: make the shared folder usable without leaving the CPC.
 
 Implement after copy/save/load are stable:
 
-- `|M4MKDIR,"DIR"` to create directories.
-- `|M4REN,"OLD","NEW"` to rename a file or directory.
-- `|M4DEL,"FILE"` to delete a file, with conservative confirmation or explicit
+- `|mkdir,"DIR"` to create directories.
+- `|mv,"OLD","NEW"` to rename a file or directory.
+- `|rm,"FILE"` to delete a file, with conservative confirmation or explicit
   force syntax.
-- Optional `|M4PWD` if `|M4DIR` output becomes too dense.
+- `|pwd` if `|ls` output becomes too dense.
 - Directory listing improvements: sizes, file type hints, and long-name display
   that remains readable on a CPC screen.
 
@@ -222,13 +280,12 @@ Acceptance:
 - Each operation updates the next `|M4DIR` result immediately and refuses paths
   outside the shared root.
 
-## Stage 10: Polish the RSX shared-folder system
+## Stage 11: Polish the RSX shared-folder system
 
 - Wildcards and pattern matching.
 - Read-only mode for safer testing.
 - Optional overwrite confirmation modes.
 - Consistent command naming and help text.
-- Optional short aliases for common RSX commands if ROM space allows.
 - Optional network later, as a separate architecture decision.
 
 Non-goals:
