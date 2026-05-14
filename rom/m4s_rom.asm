@@ -8,7 +8,10 @@
 ;     |M4DIR
 ;     |M4TYPE,"FILE.TXT"
 ;     |M4DUMP,"FILE.BIN"
+;     |M4INFO,"FILE.BIN"
 ;     |M4LOAD,"FILE.BIN"
+;     |M4LOAD,"FILE.BIN",&8000
+;     |M4LOADH,"FILE.BIN"
 ;
 ; Running |HELLO prints:
 ;
@@ -20,6 +23,7 @@
         include "m4s_protocol.inc"       ; Mailbox port and command constants.
 
 KL_ROM_BASE     equ &C000
+KM_WAIT_CHAR    equ &BB06                ; Firmware: wait for a keypress.
 TXT_OUTPUT      equ &BB5A                ; Firmware: print character in A.
 CHAR_CR         equ 13
 CHAR_LF         equ 10
@@ -54,6 +58,8 @@ rom_prefix:
         jp rsx_m4type                    ; Entry 3: BASIC command |M4TYPE.
         jp rsx_m4dump                    ; Entry 4: BASIC command |M4DUMP.
         jp rsx_m4load                    ; Entry 5: BASIC command |M4LOAD.
+        jp rsx_m4info                    ; Entry 6: BASIC command |M4INFO.
+        jp rsx_m4loadh                   ; Entry 7: BASIC command |M4LOADH.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -72,6 +78,8 @@ command_names:
         db "M4TYP", &C5                  ; Entry 3: rsx_m4type ("E" + bit 7).
         db "M4DUM", &D0                  ; Entry 4: rsx_m4dump ("P" + bit 7).
         db "M4LOA", &C4                  ; Entry 5: rsx_m4load ("D" + bit 7).
+        db "M4INF", &CF                  ; Entry 6: rsx_m4info ("O" + bit 7).
+        db "M4LOAD", &C8                 ; Entry 7: rsx_m4loadh ("H" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -305,6 +313,87 @@ rsx_m4dump_output:
         jr rsx_m4dump_loop
 
 ; ---------------------------------------------------------------------------
+; |M4INFO,"filename" RSX implementation.
+;
+; Requests host-side metadata for a shared file.  Main_MiSTer currently reports
+; file size and AMSDOS header fields if the first 128 bytes pass the AMSDOS
+; checksum.
+; ---------------------------------------------------------------------------
+rsx_m4info:
+        cp 1
+        jr z, rsx_m4info_have_param
+        ld hl, msg_info_usage
+        call print_string
+        ret
+
+rsx_m4info_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4info_nonempty
+        ld hl, msg_info_usage
+        call print_string
+        ret
+
+rsx_m4info_nonempty:
+        ld b, a                          ; B = remaining length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = string data.
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "I"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+rsx_m4info_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz rsx_m4info_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        xor a
+        ld e, a
+
+rsx_m4info_loop:
+        call mailbox_read_byte
+        ret nc
+        or a
+        ret z
+        cp CHAR_LF
+        jr nz, rsx_m4info_output
+        ld a, e
+        cp CHAR_CR
+        ld a, CHAR_LF
+        jr z, rsx_m4info_output
+        push af
+        ld a, CHAR_CR
+        call TXT_OUTPUT
+        pop af
+rsx_m4info_output:
+        call TXT_OUTPUT
+        ld e, a
+        jr rsx_m4info_loop
+
+; ---------------------------------------------------------------------------
 ; |M4LOAD,"filename" RSX implementation.
 ;
 ; Stage 4 proof of raw binary transfer.  This loads a file from the shared
@@ -313,12 +402,15 @@ rsx_m4dump_output:
 ; ---------------------------------------------------------------------------
 rsx_m4load:
         cp 1
-        jr z, rsx_m4load_have_param
+        jr z, rsx_m4load_one_param
+        cp 2
+        jr z, rsx_m4load_two_params
         ld hl, msg_load_usage
         call print_string
         ret
 
-rsx_m4load_have_param:
+rsx_m4load_one_param:
+        ld iy, 0                         ; Filename descriptor is at IX+0.
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
@@ -328,8 +420,34 @@ rsx_m4load_have_param:
         call print_string
         ret
 
+rsx_m4load_two_params:
+        ld iy, 1                         ; Filename descriptor is at IX+2.
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4load_nonempty
+        ld hl, msg_load_usage
+        call print_string
+        ret
+
 rsx_m4load_nonempty:
-        ld hl, M4S_LOAD_ADDR             ; HL = destination pointer.
+        push iy
+        pop bc
+        ld a, b
+        or c
+        jr z, rsx_m4load_default_addr
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = destination pointer.
+        ld a, h
+        cp &40
+        jr c, rsx_m4load_error
+        jr rsx_m4load_addr_ready
+
+rsx_m4load_default_addr:
+        ld hl, M4S_LOAD_ADDR             ; HL = default destination pointer.
+
+rsx_m4load_addr_ready:
         ld de, 0                         ; DE = file offset for next chunk.
 
 rsx_m4load_chunk:
@@ -387,6 +505,155 @@ rsx_m4load_error:
         call print_string
         ret
 
+; ---------------------------------------------------------------------------
+; |M4LOADH,"filename" RSX implementation.
+;
+; Reads AMSDOS metadata, prompts the user, loads the payload at the AMSDOS load
+; address, and jumps to the AMSDOS entry address.  This is deliberately separate
+; from M4LOAD because it may write to low memory.
+; ---------------------------------------------------------------------------
+rsx_m4loadh:
+        cp 1
+        jr z, rsx_m4loadh_have_param
+        ld hl, msg_loadh_usage
+        call print_string
+        ret
+
+rsx_m4loadh_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4loadh_nonempty
+        ld hl, msg_loadh_usage
+        call print_string
+        ret
+
+rsx_m4loadh_nonempty:
+        push ix
+        call rsx_m4info_have_param
+        ld hl, msg_loadh_prompt
+        call print_string
+        call KM_WAIT_CHAR
+        cp "Y"
+        jr z, rsx_m4loadh_confirmed
+        cp "y"
+        jr z, rsx_m4loadh_confirmed
+        pop ix
+        ld hl, msg_loadh_cancelled
+        call print_string
+        ret
+
+rsx_m4loadh_confirmed:
+        pop ix
+        ld hl, 0                         ; HL = destination pointer, filled
+                                         ; from the first response header.
+        ld de, 0                         ; DE = file offset for next chunk.
+        ld iy, 0                         ; IY = entry address.
+
+rsx_m4loadh_chunk:
+        call m4loadh_send_request
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        call m4load_read_byte
+        jr nc, rsx_m4load_error
+        ld c, a
+        call m4load_read_byte
+        jr nc, rsx_m4load_error
+        ld b, a                          ; BC = returned payload byte count.
+
+        ld a, b
+        cp 3
+        jr nc, rsx_m4load_error          ; Refuse counts above 512 bytes.
+        cp 2
+        jr nz, rsx_m4loadh_count_valid
+        ld a, c
+        or a
+        jr nz, rsx_m4load_error
+
+rsx_m4loadh_count_valid:
+        call m4load_read_byte            ; Read AMSDOS load address low byte.
+        jr nc, rsx_m4load_error
+        push af
+        call m4load_read_byte            ; Read AMSDOS load address high byte.
+        jr nc, rsx_m4load_error
+        push af
+        ld a, d
+        or e
+        jr nz, rsx_m4loadh_drop_load_addr
+        pop af
+        ld h, a
+        pop af
+        ld l, a
+        jr rsx_m4loadh_read_entry
+
+rsx_m4loadh_drop_load_addr:
+        pop af
+        pop af
+
+rsx_m4loadh_read_entry:
+        push hl
+        call m4load_read_byte            ; Read AMSDOS entry address low byte.
+        jp nc, rsx_m4load_error
+        push af
+        call m4load_read_byte            ; Read AMSDOS entry address high byte.
+        jp nc, rsx_m4load_error
+        ld h, a
+        pop af
+        ld l, a
+        push hl
+        pop iy
+        pop hl
+
+        call m4load_read_byte            ; Read AMSDOS type byte.
+        jp nc, rsx_m4load_error
+        push af
+
+        ld a, b
+        or c
+        jr z, rsx_m4loadh_done
+
+        pop af
+rsx_m4loadh_write_loop:
+        call m4load_read_byte
+        jp nc, rsx_m4load_error
+        ld (hl), a
+        inc hl
+        inc de
+        dec bc
+        ld a, b
+        or c
+        jr nz, rsx_m4loadh_write_loop
+
+        ld a, d
+        or e
+        jp z, rsx_m4load_done
+
+        jr rsx_m4loadh_chunk
+
+rsx_m4loadh_done:
+        pop af
+        cp &00                           ; BASIC: load only, then user can RUN.
+        jp z, rsx_m4loadh_basic_done
+        cp &01                           ; Protected BASIC: load only too.
+        jp z, rsx_m4loadh_basic_done
+        cp &02                           ; Binary: jump if an entry exists.
+        jp nz, rsx_m4load_done
+        push iy
+        pop hl
+        ld a, h
+        or l
+        jp z, rsx_m4load_done
+        jp (hl)
+
+rsx_m4loadh_basic_done:
+        ld hl, msg_loadh_basic_done
+        call print_string
+        ret
+
 ; Read one mailbox byte while preserving the active chunk state in HL/BC/DE.
 m4load_read_byte:
         push hl
@@ -420,8 +687,21 @@ m4load_send_request:
         ld bc, M4S_PORT_DATA
         out (c), a
 
+        push iy
+        pop hl
+        ld a, h
+        or l
+        jr z, m4load_send_filename_at_ix0
+
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = string descriptor.
+        jr m4load_send_filename_descriptor
+
+m4load_send_filename_at_ix0:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
+
+m4load_send_filename_descriptor:
         ld b, (hl)                       ; B = filename length.
         inc hl
         ld e, (hl)
@@ -464,6 +744,53 @@ m4load_send_hex_nibble:
 m4load_send_hex_digit:
         ld bc, M4S_PORT_DATA
         out (c), a
+        ret
+
+; Send request "H:OOOO:filename", where OOOO is the payload offset in DE.
+m4loadh_send_request:
+        push hl
+        push de
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "H"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        ld a, d
+        call m4load_send_hex_byte
+        ld a, e
+        call m4load_send_hex_byte
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld b, (hl)                       ; B = filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = filename data.
+
+m4loadh_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz m4loadh_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop de
+        pop hl
         ret
 
 ; Wait for one byte from the mailbox.
@@ -512,7 +839,7 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.2 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.4 installed", 13, 10, 13, 10, 0
 
 msg_type_usage:
         db "Usage: |M4TYPE,", 34, "FILE.TXT", 34, 13, 10, 0
@@ -520,14 +847,29 @@ msg_type_usage:
 msg_dump_usage:
         db "Usage: |M4DUMP,", 34, "FILE.BIN", 34, 13, 10, 0
 
+msg_info_usage:
+        db "Usage: |M4INFO,", 34, "FILE.BIN", 34, 13, 10, 0
+
 msg_load_usage:
-        db "Usage: |M4LOAD,", 34, "FILE.BIN", 34, 13, 10, 0
+        db "Usage: |M4LOAD,", 34, "FILE.BIN", 34, ",&8000", 13, 10, 0
 
 msg_load_done:
-        db "Loaded at &4000", 13, 10, 0
+        db "Loaded", 13, 10, 0
 
 msg_load_error:
         db "Load failed", 13, 10, 0
+
+msg_loadh_usage:
+        db "Usage: |M4LOADH,", 34, "FILE.BIN", 34, 13, 10, 0
+
+msg_loadh_prompt:
+        db "Load and CALL entry? Y/N ", 0
+
+msg_loadh_cancelled:
+        db 13, 10, "Cancelled", 13, 10, 0
+
+msg_loadh_basic_done:
+        db 13, 10, "Loaded BASIC - type RUN", 13, 10, 0
 
 ; Expansion ROM images are 16KB.  Pad unused space with &FF, the normal erased
 ; EPROM byte value.  The build script assembles this as a raw binary suitable

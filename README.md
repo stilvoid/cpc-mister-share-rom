@@ -9,8 +9,8 @@ adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory index
 through MiSTer's existing file download path. Stage 3B adds a custom
 Main_MiSTer hook that serves live `shared` folder listings on demand through
 `EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"` and
-`|M4DUMP,"FILE.BIN"`, then adds a first chunked binary load proof with
-`|M4LOAD,"FILE.BIN"`.
+`|M4DUMP,"FILE.BIN"`, adds `|M4INFO,"FILE.BIN"` for AMSDOS header diagnostics,
+then adds a first chunked binary load proof with `|M4LOAD,"FILE.BIN"`.
 
 ## Stage 1-4 status
 
@@ -20,7 +20,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.2 installed
+ M4S ROM Stage 4.4 installed
 
 ```
 
@@ -71,8 +71,13 @@ GAMES
 - A read-only `|M4DUMP,"FILE.BIN"` proof that asks Main_MiSTer to read a file
   and return an ASCII hex dump, avoiding zero-byte framing issues while testing
   binary reads.
+- A read-only `|M4INFO,"FILE.BIN"` command that prints file size and AMSDOS
+  header metadata when the header checksum is valid.
 - A proof `|M4LOAD,"FILE.BIN"` command that loads raw bytes from the shared
   folder into CPC RAM at `&4000` using 512-byte chunks.
+- A deliberately dangerous `|M4LOADH,"FILE.BIN"` command that displays AMSDOS
+  header info, prompts for confirmation, loads the payload at the AMSDOS load
+  address, and jumps to the AMSDOS entry address.
 
 Not implemented yet:
 
@@ -266,19 +271,59 @@ The current mailbox stream is zero-terminated, so `|M4DUMP` does not stream raw
 binary bytes to the CPC yet. Main_MiSTer reads the binary file and formats the
 response as hex rows. The dump is capped by the same 2048-byte stream buffer.
 
-## Stage 4C binary load proof
+## Stage 4C AMSDOS file info
 
-`|M4LOAD` loads a shared binary file into CPC RAM at `&4000`:
+`|M4INFO` reads the first 128 bytes of a shared file and reports AMSDOS header
+metadata if the header checksum is valid:
+
+```basic
+|M4INFO,"FILE.BIN"
+```
+
+When a valid AMSDOS header is present, the output includes the AMSDOS filename,
+file type byte, data length, load address, logical length, entry address, and
+real length. If the checksum does not match, the file is reported as headerless.
+
+## Stage 4D binary load proof
+
+`|M4LOAD` loads a shared binary file into CPC RAM. With one argument it keeps
+the original proof default of `&4000`:
 
 ```basic
 |M4LOAD,"FILE.BIN"
 ```
 
+With two arguments, the second argument is the destination address:
+
+```basic
+|M4LOAD,"FILE.BIN",&8000
+```
+
 Main_MiSTer returns raw file chunks with a two-byte little-endian byte count
 followed by up to 512 bytes of data. Unlike the text commands, this response is
 length-aware and can carry `00` bytes. The current ROM command is still a proof:
-the destination address is fixed at `&4000`, the request offset is 16-bit, and
-large files should be kept below the available CPC RAM range.
+the request offset is 16-bit, and large files should be kept below the available
+CPC RAM range.
+
+## Stage 4E AMSDOS header load and run
+
+`|M4LOADH` is an opt-in diagnostic for real AMSDOS binaries:
+
+```basic
+|M4LOADH,"FILE.BIN"
+```
+
+It first prints the same metadata as `|M4INFO`, then prompts:
+
+```text
+Load and CALL entry? Y/N
+```
+
+If confirmed with `Y`, Main_MiSTer verifies the AMSDOS header, skips the
+128-byte header, serves payload chunks, and the ROM writes them to the AMSDOS
+load address before jumping to the AMSDOS entry address. This can overwrite low
+memory and reset or crash the CPC if the program expects a different runtime
+environment.
 
 ## Testing `|HELLO` in BASIC
 

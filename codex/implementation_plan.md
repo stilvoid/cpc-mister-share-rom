@@ -83,8 +83,12 @@ Implement:
 - `|M4TYPE,"FILE.TXT"` streams a small text file from the shared folder.
 - `|M4DUMP,"FILE.BIN"` dumps a binary file as ASCII hex, proving binary file
   reads before the mailbox can carry raw zero bytes.
-- `|M4LOAD,"FILE.BIN"` loads raw binary chunks into RAM at `&4000`, proving
-  length-aware binary responses and chunked reads larger than the mailbox.
+- `|M4INFO,"FILE.BIN"` reports file size and AMSDOS header metadata.
+- `|M4LOAD,"FILE.BIN"` and `|M4LOAD,"FILE.BIN",&8000` load raw binary chunks
+  into RAM, proving length-aware binary responses and chunked reads larger than
+  the mailbox.
+- `|M4LOADH,"FILE.BIN"` displays AMSDOS header metadata, prompts, loads the
+  payload at the AMSDOS load address, and jumps to the AMSDOS entry address.
 - Later, `|M4DIR` returns real folder contents through a general protocol.
 - `|CD,"path"` changes current folder.
 - `|LOAD,"file"` loads a binary or BASIC file into CPC memory.

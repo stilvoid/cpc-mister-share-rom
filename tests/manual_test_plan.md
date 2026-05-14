@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.2 installed
+ M4S ROM Stage 4.4 installed
 
 ```
 
@@ -115,7 +115,27 @@ The CPC prints offset-prefixed hex rows such as:
 The output is ASCII hex, not raw binary, because the current mailbox response is
 still zero-terminated.
 
-## Stage 4C: Load a shared binary file
+## Stage 4C: Inspect shared file metadata
+
+1. Install the matching custom Main_MiSTer binary and ROM.
+2. Put an AMSDOS binary file in the resolved shared folder.
+3. Start the Amstrad core and run:
+
+```basic
+|M4INFO,"FILE.BIN"
+```
+
+Expected for a file with a valid AMSDOS header:
+
+```text
+AMSDOS: HEADER OK
+LOAD: &....
+ENTRY: &....
+```
+
+Headerless files should print `AMSDOS: NO HEADER`.
+
+## Stage 4D: Load a shared binary file
 
 1. Install the matching custom Main_MiSTer binary, Amstrad core, and ROM.
 2. Put a small binary file in the resolved shared folder.
@@ -128,12 +148,36 @@ still zero-terminated.
 Expected:
 
 ```text
-Loaded at &4000
+Loaded
 ```
 
 Use a monitor, BASIC `PEEK`, or a small test program to confirm the bytes at
-`&4000` match the source file. The proof command reads in 512-byte chunks, but
-the destination address is fixed and the file offset is currently 16-bit.
+`&4000` match the source file.
+
+Then try an explicit destination:
+
+```basic
+|M4LOAD,"FILE.BIN",&8000
+```
+
+Confirm the bytes at `&8000` match the source file. The proof command reads in
+512-byte chunks, and the file offset is currently 16-bit.
+
+## Stage 4E: Load and run an AMSDOS binary
+
+1. Install the matching custom Main_MiSTer binary and ROM.
+2. Put an AMSDOS binary with a valid header in the resolved shared folder.
+3. Start the Amstrad core and run:
+
+```basic
+|M4LOADH,"FILE.BIN"
+```
+
+Expected:
+
+The command prints file metadata, prompts for confirmation, then loads the
+payload at the AMSDOS load address and jumps to the AMSDOS entry address when
+you press `Y`.
 
 ## Debug hints
 
@@ -143,6 +187,6 @@ the destination address is fixed and the file offset is currently 16-bit.
 - If `|M4DIR` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If live listing does not update, confirm the custom Main_MiSTer binary is
   running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|M4TYPE`, `|M4DUMP`, or `|M4LOAD` hangs, check the CPC-to-HPS request status path in
+- If `|M4TYPE`, `|M4DUMP`, `|M4INFO`, `|M4LOAD`, or `|M4LOADH` hangs, check the CPC-to-HPS request status path in
   `m4s_mailbox` and `m4s_hps_ext`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.
