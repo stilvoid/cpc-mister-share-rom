@@ -10,7 +10,8 @@ through MiSTer's existing file download path. Stage 3B adds a custom
 Main_MiSTer hook that serves live `shared` folder listings on demand through
 `EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"` and
 `|M4DUMP,"FILE.BIN"`, adds `|M4INFO,"FILE.BIN"` for AMSDOS header diagnostics,
-then adds a first chunked binary load proof with `|M4LOAD,"FILE.BIN"`.
+then adds a first chunked binary load proof with `|M4LOAD,"FILE.BIN"`. Stage
+4.5 adds `|M4CD` navigation within the shared folder.
 
 ## Stage 1-4 status
 
@@ -20,7 +21,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.4 installed
+ M4S ROM Stage 4.5 installed
 
 ```
 
@@ -64,6 +65,7 @@ GAMES
   streams it back via `|M4DIR`.
 - A small Amstrad-specific Main_MiSTer helper that lists the configured
   `shared` folder and sends it to the core over `EXT_BUS`.
+- A current-directory model for the helper, controlled by `|M4CD`.
 - An FPGA `EXT_BUS` bridge in `rtl/m4s_hps_ext.sv` that loads that live listing
   into the same directory index buffer used by `Load M4S index`.
 - A read-only `|M4TYPE,"FILE.TXT"` proof that sends a filename from the CPC to
@@ -84,6 +86,10 @@ Not implemented yet:
 - General file open/read/write commands.
 - AMSDOS interception.
 - M4 compatibility.
+
+Future M4 compatibility reference:
+
+- M4 board ROM source: <https://github.com/M4Duke/m4rom>
 
 ## How CPC expansion ROMs work
 
@@ -244,6 +250,28 @@ GAMES/
 Directory names are suffixed with `/`. The listing is capped to the same
 2048-byte index buffer as Stage 3A.
 
+## Stage 4 shared-folder navigation
+
+The helper maintains a current directory relative to the configured `shared`
+folder. The current directory affects `|M4DIR`, `|M4TYPE`, `|M4DUMP`,
+`|M4INFO`, `|M4LOAD`, and `|M4LOADH`.
+
+Reset to the shared root:
+
+```basic
+|M4CD
+```
+
+Enter a child directory:
+
+```basic
+|M4CD,"GAMES"
+```
+
+For now, `|M4CD` only accepts one child directory name at a time. Absolute paths,
+path separators, and parent traversal are rejected. To get back to root, run
+`|M4CD` with no arguments.
+
 ## Stage 4A text file streaming
 
 With the matching custom Main_MiSTer binary and Amstrad core installed,
@@ -336,7 +364,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.2 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.5 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 

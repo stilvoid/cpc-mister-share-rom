@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.4 installed
+ M4S ROM Stage 4.5 installed
 
 ```
 
@@ -78,6 +78,25 @@ M4S SHARED
 ```
 
 followed by the files and folders from the shared folder.
+
+## Stage 4: Navigate shared folders
+
+1. Install the matching custom Main_MiSTer binary and ROM.
+2. Create a child directory under the resolved shared folder.
+3. Run:
+
+```basic
+|M4DIR
+|M4CD,"GAMES"
+|M4DIR
+|M4CD
+|M4DIR
+```
+
+Expected:
+
+`|M4CD,"GAMES"` prints `CWD: /GAMES`, file commands resolve relative to that
+directory, and bare `|M4CD` resets to `CWD: /`.
 
 ## Stage 4A: Type a shared text file
 
@@ -187,6 +206,6 @@ you press `Y`.
 - If `|M4DIR` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If live listing does not update, confirm the custom Main_MiSTer binary is
   running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|M4TYPE`, `|M4DUMP`, `|M4INFO`, `|M4LOAD`, or `|M4LOADH` hangs, check the CPC-to-HPS request status path in
+- If `|M4CD`, `|M4TYPE`, `|M4DUMP`, `|M4INFO`, `|M4LOAD`, or `|M4LOADH` hangs, check the CPC-to-HPS request status path in
   `m4s_mailbox` and `m4s_hps_ext`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.

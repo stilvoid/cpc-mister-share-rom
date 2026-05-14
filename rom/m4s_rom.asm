@@ -6,6 +6,8 @@
 ;
 ;     |HELLO
 ;     |M4DIR
+;     |M4CD
+;     |M4CD,"DIR"
 ;     |M4TYPE,"FILE.TXT"
 ;     |M4DUMP,"FILE.BIN"
 ;     |M4INFO,"FILE.BIN"
@@ -60,6 +62,7 @@ rom_prefix:
         jp rsx_m4load                    ; Entry 5: BASIC command |M4LOAD.
         jp rsx_m4info                    ; Entry 6: BASIC command |M4INFO.
         jp rsx_m4loadh                   ; Entry 7: BASIC command |M4LOADH.
+        jp rsx_m4cd                      ; Entry 8: BASIC command |M4CD.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -80,6 +83,7 @@ command_names:
         db "M4LOA", &C4                  ; Entry 5: rsx_m4load ("D" + bit 7).
         db "M4INF", &CF                  ; Entry 6: rsx_m4info ("O" + bit 7).
         db "M4LOAD", &C8                 ; Entry 7: rsx_m4loadh ("H" + bit 7).
+        db "M4C", &C4                    ; Entry 8: rsx_m4cd ("D" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -154,6 +158,102 @@ rsx_m4dir_output:
         call TXT_OUTPUT
         ld e, a
         jr rsx_m4dir_loop
+
+; ---------------------------------------------------------------------------
+; |M4CD and |M4CD,"dirname" RSX implementation.
+;
+; With no parameter, resets Main_MiSTer's current shared-folder view to the
+; shared root.  With one string parameter, enters a child directory under the
+; current folder.  Main_MiSTer rejects absolute paths and parent traversal.
+; ---------------------------------------------------------------------------
+rsx_m4cd:
+        cp 0
+        jr z, rsx_m4cd_root
+        cp 1
+        jr z, rsx_m4cd_have_param
+        ld hl, msg_cd_usage
+        call print_string
+        ret
+
+rsx_m4cd_root:
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "C"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        xor a
+        out (c), a
+        jr rsx_m4cd_send_command
+
+rsx_m4cd_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4cd_nonempty
+        jr rsx_m4cd_root
+
+rsx_m4cd_nonempty:
+        ld b, a                          ; B = remaining length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = string data.
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "C"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+rsx_m4cd_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz rsx_m4cd_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+rsx_m4cd_send_command:
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        xor a
+        ld e, a
+
+rsx_m4cd_loop:
+        call mailbox_read_byte
+        ret nc
+        or a
+        ret z
+        cp CHAR_LF
+        jr nz, rsx_m4cd_output
+        ld a, e
+        cp CHAR_CR
+        ld a, CHAR_LF
+        jr z, rsx_m4cd_output
+        push af
+        ld a, CHAR_CR
+        call TXT_OUTPUT
+        pop af
+rsx_m4cd_output:
+        call TXT_OUTPUT
+        ld e, a
+        jr rsx_m4cd_loop
 
 ; ---------------------------------------------------------------------------
 ; |M4TYPE,"filename" RSX implementation.
@@ -839,7 +939,10 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.4 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.5 installed", 13, 10, 13, 10, 0
+
+msg_cd_usage:
+        db "Usage: |M4CD,", 34, "DIR", 34, 13, 10, 0
 
 msg_type_usage:
         db "Usage: |M4TYPE,", 34, "FILE.TXT", 34, 13, 10, 0

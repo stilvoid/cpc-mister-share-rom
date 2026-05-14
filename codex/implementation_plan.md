@@ -89,6 +89,8 @@ Implement:
   the mailbox.
 - `|M4LOADH,"FILE.BIN"` displays AMSDOS header metadata, prompts, loads the
   payload at the AMSDOS load address, and jumps to the AMSDOS entry address.
+- `|M4CD` changes the current helper directory relative to the configured
+  shared folder.
 - Later, `|M4DIR` returns real folder contents through a general protocol.
 - `|CD,"path"` changes current folder.
 - `|LOAD,"file"` loads a binary or BASIC file into CPC memory.
@@ -110,3 +112,7 @@ First route:
 - AMSDOS-like transparent `LOAD`, `SAVE`, `CAT`.
 - Optional M4-compatible command aliases.
 - Optional network later, as a separate architecture decision.
+
+Future compatibility reference:
+
+- M4 board ROM source: https://github.com/M4Duke/m4rom
