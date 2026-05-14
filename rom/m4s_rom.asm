@@ -7,6 +7,7 @@
 ;     |HELLO
 ;     |M4DIR
 ;     |M4TYPE,"FILE.TXT"
+;     |M4DUMP,"FILE.BIN"
 ;
 ; Running |HELLO prints:
 ;
@@ -49,6 +50,7 @@ rom_prefix:
         jp rsx_hello                     ; Entry 1: BASIC command |HELLO.
         jp rsx_m4dir                     ; Entry 2: BASIC command |M4DIR.
         jp rsx_m4type                    ; Entry 3: BASIC command |M4TYPE.
+        jp rsx_m4dump                    ; Entry 4: BASIC command |M4DUMP.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -65,6 +67,7 @@ command_names:
         db "HELL", &CF                   ; Entry 1: rsx_hello ("O" + bit 7).
         db "M4DI", &D2                   ; Entry 2: rsx_m4dir ("R" + bit 7).
         db "M4TYP", &C5                  ; Entry 3: rsx_m4type ("E" + bit 7).
+        db "M4DUM", &D0                  ; Entry 4: rsx_m4dump ("P" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -215,6 +218,88 @@ rsx_m4type_output:
         ld e, a
         jr rsx_m4type_loop
 
+; ---------------------------------------------------------------------------
+; |M4DUMP,"filename" RSX implementation.
+;
+; The current mailbox stream is zero-terminated, so it cannot carry arbitrary
+; binary bytes directly.  M4DUMP asks Main_MiSTer to read the file and return an
+; ASCII hex dump, proving the host-side binary read path without changing the
+; stream framing yet.
+; ---------------------------------------------------------------------------
+rsx_m4dump:
+        cp 1
+        jr z, rsx_m4dump_have_param
+        ld hl, msg_dump_usage
+        call print_string
+        ret
+
+rsx_m4dump_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4dump_nonempty
+        ld hl, msg_dump_usage
+        call print_string
+        ret
+
+rsx_m4dump_nonempty:
+        ld b, a                          ; B = remaining length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = string data.
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "D"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+rsx_m4dump_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz rsx_m4dump_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        xor a
+        ld e, a
+
+rsx_m4dump_loop:
+        call mailbox_read_byte
+        ret nc
+        or a
+        ret z
+        cp CHAR_LF
+        jr nz, rsx_m4dump_output
+        ld a, e
+        cp CHAR_CR
+        ld a, CHAR_LF
+        jr z, rsx_m4dump_output
+        push af
+        ld a, CHAR_CR
+        call TXT_OUTPUT
+        pop af
+rsx_m4dump_output:
+        call TXT_OUTPUT
+        ld e, a
+        jr rsx_m4dump_loop
+
 ; Wait for one byte from the mailbox.
 ;
 ; Carry set:   A contains a byte read from DATA.
@@ -261,10 +346,13 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.0 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.1 installed", 13, 10, 13, 10, 0
 
 msg_type_usage:
         db "Usage: |M4TYPE,", 34, "FILE.TXT", 34, 13, 10, 0
+
+msg_dump_usage:
+        db "Usage: |M4DUMP,", 34, "FILE.BIN", 34, 13, 10, 0
 
 ; Expansion ROM images are 16KB.  Pad unused space with &FF, the normal erased
 ; EPROM byte value.  The build script assembles this as a raw binary suitable

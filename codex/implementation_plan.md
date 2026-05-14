@@ -81,6 +81,8 @@ Acceptance:
 Implement:
 
 - `|M4TYPE,"FILE.TXT"` streams a small text file from the shared folder.
+- `|M4DUMP,"FILE.BIN"` dumps a binary file as ASCII hex, proving binary file
+  reads before the mailbox can carry raw zero bytes.
 - Later, `|M4DIR` returns real folder contents through a general protocol.
 - `|CD,"path"` changes current folder.
 - `|LOAD,"file"` loads a binary or BASIC file into CPC memory.

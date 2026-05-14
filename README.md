@@ -7,8 +7,9 @@ This is deliberately not a full M4 clone. Stage 1 was only a tiny CPC expansion
 ROM that proves the CPC can see the ROM and dispatch an RSX command. Stage 2
 adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory index
 through MiSTer's existing file download path. Stage 3B adds a custom
-Main_MiSTer hook that periodically pushes a live `shared` folder listing through
-`EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"`.
+Main_MiSTer hook that serves live `shared` folder listings on demand through
+`EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"` and
+`|M4DUMP,"FILE.BIN"`.
 
 ## Stage 1-4 status
 
@@ -18,7 +19,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.0 installed
+ M4S ROM Stage 4.1 installed
 
 ```
 
@@ -66,6 +67,9 @@ GAMES
   into the same directory index buffer used by `Load M4S index`.
 - A read-only `|M4TYPE,"FILE.TXT"` proof that sends a filename from the CPC to
   Main_MiSTer and streams the file contents back through the mailbox.
+- A read-only `|M4DUMP,"FILE.BIN"` proof that asks Main_MiSTer to read a file
+  and return an ASCII hex dump, avoiding zero-byte framing issues while testing
+  binary reads.
 
 Not implemented yet:
 
@@ -211,8 +215,8 @@ no index has been loaded, `|M4DIR` prints `NO M4S INDEX`.
 
 ## Stage 3B live shared folder listing
 
-With the matching custom Main_MiSTer binary installed, Main_MiSTer periodically
-enumerates the configured shared folder and pushes a text listing into the core.
+With the matching custom Main_MiSTer binary installed, `|M4DIR` asks Main_MiSTer
+to enumerate the configured shared folder and push a text listing into the core.
 
 The base folder follows Main_MiSTer's existing convention:
 
@@ -246,6 +250,19 @@ are rejected, so files are constrained to the shared folder. The response uses
 the same 2048-byte stream buffer as the directory listing proof, and text output
 normalizes bare LF to CRLF for CPC display.
 
+## Stage 4B binary dump proof
+
+`|M4DUMP` reads a single file from the resolved shared folder and prints an
+ASCII hex dump:
+
+```basic
+|M4DUMP,"FILE.BIN"
+```
+
+The current mailbox stream is zero-terminated, so `|M4DUMP` does not stream raw
+binary bytes to the CPC yet. Main_MiSTer reads the binary file and formats the
+response as hex rows. The dump is capped by the same 2048-byte stream buffer.
+
 ## Testing `|HELLO` in BASIC
 
 1. Build the ROM:
@@ -257,7 +274,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.0 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.1 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 
