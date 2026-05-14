@@ -6,6 +6,7 @@
 ;
 ;     |HELLO
 ;     |M4DIR
+;     |M4TYPE,"FILE.TXT"
 ;
 ; Running |HELLO prints:
 ;
@@ -47,6 +48,7 @@ rom_prefix:
         jp rom_init                      ; Entry 0: firmware power-up entry.
         jp rsx_hello                     ; Entry 1: BASIC command |HELLO.
         jp rsx_m4dir                     ; Entry 2: BASIC command |M4DIR.
+        jp rsx_m4type                    ; Entry 3: BASIC command |M4TYPE.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -62,6 +64,7 @@ command_names:
         db "M4S BOO", &D4                ; Entry 0: rom_init ("T" + bit 7).
         db "HELL", &CF                   ; Entry 1: rsx_hello ("O" + bit 7).
         db "M4DI", &D2                   ; Entry 2: rsx_m4dir ("R" + bit 7).
+        db "M4TYP", &C5                  ; Entry 3: rsx_m4type ("E" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -137,6 +140,81 @@ rsx_m4dir_output:
         ld e, a
         jr rsx_m4dir_loop
 
+; ---------------------------------------------------------------------------
+; |M4TYPE,"filename" RSX implementation.
+;
+; This is a small Stage 4 proof of concept.  It sends a single filename string
+; to the FPGA mailbox, asks Main_MiSTer to read it from the shared folder, and
+; prints the returned byte stream.
+; ---------------------------------------------------------------------------
+rsx_m4type:
+        cp 1
+        jr z, rsx_m4type_have_param
+        ld hl, msg_type_usage
+        call print_string
+        ret
+
+rsx_m4type_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr nz, rsx_m4type_nonempty
+        ld hl, msg_type_usage
+        call print_string
+        ret
+
+rsx_m4type_nonempty:
+        ld b, a                          ; B = remaining length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = string data.
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+rsx_m4type_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz rsx_m4type_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        xor a
+        ld e, a
+
+rsx_m4type_loop:
+        call mailbox_read_byte
+        ret nc
+        or a
+        ret z
+        cp CHAR_LF
+        jr nz, rsx_m4type_output
+        ld a, e
+        cp CHAR_CR
+        ld a, CHAR_LF
+        jr z, rsx_m4type_output
+        push af
+        ld a, CHAR_CR
+        call TXT_OUTPUT
+        pop af
+rsx_m4type_output:
+        call TXT_OUTPUT
+        ld e, a
+        jr rsx_m4type_loop
+
 ; Wait for one byte from the mailbox.
 ;
 ; Carry set:   A contains a byte read from DATA.
@@ -183,7 +261,10 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 2.1 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.0 installed", 13, 10, 13, 10, 0
+
+msg_type_usage:
+        db "Usage: |M4TYPE,", 34, "FILE.TXT", 34, 13, 10, 0
 
 ; Expansion ROM images are 16KB.  Pad unused space with &FF, the normal erased
 ; EPROM byte value.  The build script assembles this as a raw binary suitable

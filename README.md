@@ -8,9 +8,9 @@ ROM that proves the CPC can see the ROM and dispatch an RSX command. Stage 2
 adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory index
 through MiSTer's existing file download path. Stage 3B adds a custom
 Main_MiSTer hook that periodically pushes a live `shared` folder listing through
-`EXT_BUS`.
+`EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"`.
 
-## Stage 1-3B status
+## Stage 1-4 status
 
 Implemented:
 
@@ -18,7 +18,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 2.1 installed
+ M4S ROM Stage 4.0 installed
 
 ```
 
@@ -62,12 +62,14 @@ GAMES
   streams it back via `|M4DIR`.
 - A small Amstrad-specific Main_MiSTer helper that lists the configured
   `shared` folder and sends it to the core over `EXT_BUS`.
-- A write-only FPGA `EXT_BUS` receiver in `rtl/m4s_hps_ext.sv` that loads that
-  live listing into the same directory index buffer used by `Load M4S index`.
+- An FPGA `EXT_BUS` bridge in `rtl/m4s_hps_ext.sv` that loads that live listing
+  into the same directory index buffer used by `Load M4S index`.
+- A read-only `|M4TYPE,"FILE.TXT"` proof that sends a filename from the CPC to
+  Main_MiSTer and streams the file contents back through the mailbox.
 
 Not implemented yet:
 
-- Real storage commands.
+- General file open/read/write commands.
 - AMSDOS interception.
 - M4 compatibility.
 
@@ -228,8 +230,21 @@ GAMES/
 ```
 
 Directory names are suffixed with `/`. The listing is capped to the same
-2048-byte index buffer as Stage 3A. This is still a directory-listing proof of
-concept; file open/read/write commands are separate later work.
+2048-byte index buffer as Stage 3A.
+
+## Stage 4A text file streaming
+
+With the matching custom Main_MiSTer binary and Amstrad core installed,
+`|M4TYPE` reads a single file from the resolved shared folder and prints it:
+
+```basic
+|M4TYPE,"HELLO.TXT"
+```
+
+The command currently accepts a single filename only. Path separators and `..`
+are rejected, so files are constrained to the shared folder. The response uses
+the same 2048-byte stream buffer as the directory listing proof, and text output
+normalizes bare LF to CRLF for CPC display.
 
 ## Testing `|HELLO` in BASIC
 
@@ -242,7 +257,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 2.1 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.0 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 

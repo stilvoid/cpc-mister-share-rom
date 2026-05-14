@@ -80,12 +80,20 @@ Acceptance:
 
 Implement:
 
-- `|M4DIR` returns real folder contents.
+- `|M4TYPE,"FILE.TXT"` streams a small text file from the shared folder.
+- Later, `|M4DIR` returns real folder contents through a general protocol.
 - `|CD,"path"` changes current folder.
 - `|LOAD,"file"` loads a binary or BASIC file into CPC memory.
 - `|SAVE,"file"` writes bytes back.
 
 Define exact BASIC/AMSDOS semantics before promising compatibility.
+
+First route:
+
+- Buffer the filename in the FPGA mailbox.
+- Let Main_MiSTer poll the request over `EXT_BUS`.
+- Read the file from the resolved shared folder and push the file contents into
+  the existing stream buffer.
 
 ## Stage 5: Polish
 

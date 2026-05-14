@@ -3,7 +3,8 @@
 // Not a full M4 clone. This is a tiny CPC-facing test interface.
 
 module m4s_mailbox #(
-    parameter int DIR_INDEX_BITS = 11
+    parameter int DIR_INDEX_BITS = 11,
+    parameter int REQUEST_BITS = 8
 ) (
     input  logic        clk,
     input  logic        reset,
@@ -21,11 +22,16 @@ module m4s_mailbox #(
     input  logic                        dir_index_wr,
     input  logic [DIR_INDEX_BITS-1:0]   dir_index_addr,
     input  logic [7:0]                  dir_index_din,
+    input  logic                        dir_index_done,
 
-    // TODO: Later connect this to a real host/HPS bridge or internal FIFO.
+    // Host request buffer for the HPS-side helper.
     output logic        host_req_valid,
     output logic [7:0]  host_req_cmd,
-    input  logic        host_req_ready
+    output logic        host_req_pending,
+    output logic [7:0]  host_req_len,
+    input  logic [REQUEST_BITS-1:0] host_req_addr,
+    output logic [7:0]  host_req_data,
+    input  logic        host_req_ack
 );
 
     localparam logic [1:0] REG_DATA   = 2'd0;
@@ -36,10 +42,14 @@ module m4s_mailbox #(
     localparam logic [7:0] CMD_NOP       = 8'h00;
     localparam logic [7:0] CMD_PING      = 8'h01;
     localparam logic [7:0] CMD_DIR_BEGIN = 8'h02;
+    localparam logic [7:0] CMD_REQ_BEGIN = 8'h0A;
+    localparam logic [7:0] CMD_TYPE      = 8'h0B;
 
     localparam int DIR_INDEX_SIZE = 1 << DIR_INDEX_BITS;
+    localparam int REQUEST_SIZE = 1 << REQUEST_BITS;
     localparam logic [DIR_INDEX_BITS-1:0] DIR_INDEX_LAST = {DIR_INDEX_BITS{1'b1}};
     localparam logic [15:0] DIR_INDEX_MAX_LEN = {{(16-DIR_INDEX_BITS){1'b0}}, DIR_INDEX_LAST} + 16'd1;
+    localparam logic [REQUEST_BITS-1:0] REQUEST_LAST = {REQUEST_BITS{1'b1}};
 
     localparam logic [15:0] PING_LEN     = 16'd9;
     localparam logic [15:0] FALLBACK_LEN = 16'd15;
@@ -53,11 +63,19 @@ module m4s_mailbox #(
     logic       old_io_wr;
     logic [1:0] old_io_addr;
     logic       dir_index_loaded;
+    logic       response_waiting;
     logic [15:0] dir_index_len;
     logic [7:0] dir_index_ram [0:DIR_INDEX_SIZE-1];
+    logic [REQUEST_BITS-1:0] request_len;
+    logic [7:0] request_ram [0:REQUEST_SIZE-1];
 
     wire io_rd_fall = old_io_rd && !(io_cs && io_rd);
     wire io_wr_rise = io_cs && io_wr && !old_io_wr;
+    wire waiting_for_response = response_waiting && !stream_active;
+
+    assign host_req_pending = host_req_valid;
+    assign host_req_len = request_len[7:0];
+    assign host_req_data = request_ram[host_req_addr];
 
     // STATUS bit layout
     // bit 0: DATA_READY
@@ -68,7 +86,8 @@ module m4s_mailbox #(
     always_comb begin
         status = 8'h02; // CAN_WRITE by default
         if (stream_active) status[0] = 1'b1;
-        if (!stream_active) status[4] = 1'b1;
+        if (!stream_active && !waiting_for_response) status[4] = 1'b1;
+        if (waiting_for_response) status[2] = 1'b1;
     end
 
     function automatic logic [7:0] ping_byte(input logic [7:0] idx);
@@ -116,6 +135,7 @@ module m4s_mailbox #(
             case (cmd)
                 CMD_PING:      stream_len = PING_LEN;
                 CMD_DIR_BEGIN: stream_len = dir_index_loaded ? dir_index_len : FALLBACK_LEN;
+                CMD_TYPE:      stream_len = dir_index_loaded ? dir_index_len : FALLBACK_LEN;
                 default:       stream_len = 16'd0;
             endcase
         end
@@ -126,6 +146,7 @@ module m4s_mailbox #(
             case (cmd)
                 CMD_PING:      stream_byte = ping_byte(idx[7:0]);
                 CMD_DIR_BEGIN: stream_byte = dir_index_loaded ? dir_index_ram[idx[DIR_INDEX_BITS-1:0]] : fallback_byte(idx);
+                CMD_TYPE:      stream_byte = dir_index_loaded ? dir_index_ram[idx[DIR_INDEX_BITS-1:0]] : fallback_byte(idx);
                 default:       stream_byte = 8'h00;
             endcase
         end
@@ -138,9 +159,11 @@ module m4s_mailbox #(
             stream_index   <= 16'h0000;
             stream_active  <= 1'b0;
             dir_index_loaded <= 1'b0;
+            response_waiting <= 1'b0;
             dir_index_len  <= FALLBACK_LEN;
             host_req_valid <= 1'b0;
             host_req_cmd   <= CMD_NOP;
+            request_len    <= '0;
             old_io_rd      <= 1'b0;
             old_io_wr      <= 1'b0;
             old_io_addr    <= 2'b00;
@@ -148,7 +171,7 @@ module m4s_mailbox #(
             old_io_rd <= io_cs && io_rd;
             old_io_wr <= io_cs && io_wr;
             if (io_cs && io_rd) old_io_addr <= io_addr;
-            host_req_valid <= 1'b0;
+            if (host_req_ack) host_req_valid <= 1'b0;
 
             if (dir_index_begin) begin
                 dir_index_loaded <= 1'b0;
@@ -169,6 +192,14 @@ module m4s_mailbox #(
                 end
             end
 
+            if (dir_index_done) begin
+                if (response_waiting) begin
+                    response_waiting <= 1'b0;
+                    stream_index <= 16'h0000;
+                    stream_active <= 1'b1;
+                end
+            end
+
             if (io_wr_rise) begin
                 unique case (io_addr)
                     REG_PARAM: begin
@@ -176,16 +207,35 @@ module m4s_mailbox #(
                     end
                     REG_CMD: begin
                         command_reg <= io_din;
-                        host_req_cmd <= io_din;
-                        host_req_valid <= 1'b1;
 
-                        if (io_din == CMD_PING || io_din == CMD_DIR_BEGIN) begin
+                        if (io_din == CMD_PING) begin
                             stream_index <= 16'h0000;
                             stream_active <= 1'b1;
+                        end else if (io_din == CMD_DIR_BEGIN) begin
+                            host_req_cmd <= io_din;
+                            host_req_valid <= 1'b1;
+                            request_len <= '0;
+                            request_ram[0] <= 8'h00;
+                            response_waiting <= 1'b1;
+                            stream_active <= 1'b0;
+                        end else if (io_din == CMD_REQ_BEGIN) begin
+                            request_len <= '0;
+                            request_ram[0] <= 8'h00;
+                            response_waiting <= 1'b0;
+                            stream_active <= 1'b0;
+                        end else if (io_din == CMD_TYPE) begin
+                            host_req_cmd <= io_din;
+                            host_req_valid <= 1'b1;
+                            response_waiting <= 1'b1;
+                            stream_active <= 1'b0;
                         end
                     end
                     REG_DATA: begin
-                        // TODO: accept path/data bytes for CD, SAVE, etc.
+                        request_ram[request_len] <= io_din;
+                        if (io_din != 8'h00 && request_len != REQUEST_LAST) begin
+                            request_len <= request_len + {{(REQUEST_BITS-1){1'b0}}, 1'b1};
+                            request_ram[request_len + {{(REQUEST_BITS-1){1'b0}}, 1'b1}] <= 8'h00;
+                        end
                     end
                     default: begin end
                 endcase

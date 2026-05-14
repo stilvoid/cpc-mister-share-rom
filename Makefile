@@ -108,6 +108,8 @@ remote-fetch-core:
 remote-start-ec2:
 	$(AWS) ec2 start-instances $(if $(AWS_REGION),--region "$(AWS_REGION)",) --instance-ids "$(EC2_INSTANCE_ID)"
 	$(AWS) ec2 wait instance-running $(if $(AWS_REGION),--region "$(AWS_REGION)",) --instance-ids "$(EC2_INSTANCE_ID)"
+	# sleep while we wait for sshd to start
+	sleep 5s
 
 remote-core: remote-start-ec2
 	$(MAKE) remote-sync-core
