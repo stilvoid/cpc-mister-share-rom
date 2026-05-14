@@ -97,8 +97,8 @@ Unix-like RSX names where they do not collide with common CPC disk ROMs. The
 current `M4*` commands remain useful fallbacks while the short names settle.
 Avoid `|DIR`, `|ERA`, and `|REN` as primary names because AMSDOS already uses
 them. Preferred future names are `|ls`, `|cd`, `|pwd`, `|cat`, `|stat`,
-`|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|cp`, `|mkdir`,
-`|mv`, and `|rm`.
+`|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|get`, `|put`,
+`|mkdir`, `|mv`, and `|rm`.
 
 ## How CPC expansion ROMs work
 

@@ -150,19 +150,22 @@ Preferred primary names:
   when appropriate.
 - `|saveb,"file.bas"` saves the current BASIC program to shared.
 - `|loadb,"file.bas"` loads a BASIC program from shared.
-- `|cp,"src","dst"` copies between shared paths and mounted CPC disk paths once
-  disk copy support exists.
+- `|get,"discfile","sharedfile"` copies from the mounted CPC disk to shared.
+- `|put,"sharedfile","discfile"` copies from shared to the mounted CPC disk.
 - `|mkdir,"dir"`, `|mv,"old","new"`, and `|rm,"file"` provide file management.
 
-Path convention for `|cp`:
+Copy command convention:
 
-- Plain paths refer to the current shared folder.
-- Rooted paths such as `/games/dizzy.bin` are rooted at the shared folder.
-- Disk paths are explicit, for example `a:discfile.bin` or `b:discfile.bin`.
+- Direction is explicit in the command name instead of encoded into filenames.
+- Shared paths follow the same current-directory/rooted-path rules as `|cd`.
+- Disk filenames are passed as plain AMSDOS filenames for the currently selected
+  drive/user.
+- Drive selection remains the job of existing AMSDOS commands such as `|A`,
+  `|B`, and `|USER`.
 - Examples:
-  - `|cp,"hello.bas","a:hello.bas"` copies shared to disk.
-  - `|cp,"a:hello.bas","hello.bas"` copies disk to shared.
-  - `|cp,"old.bin","backup/old.bin"` copies within shared.
+  - `|put,"hello.bas","hello.bas"` copies shared to disk.
+  - `|get,"hello.bas","hello.bas"` copies disk to shared.
+  - `|put,"games/dizzy.bin","dizzy.bin"` copies a nested shared file to disk.
 
 Transition plan:
 
@@ -215,7 +218,7 @@ Preferred route:
 
 - Use CPC firmware/AMSDOS file APIs from the ROM side so the mounted disk image
   is updated by the existing CPC disk stack.
-- Add `|cp,"SHARED.BIN","A:DISCNAME.BIN"`.
+- Add `|put,"SHARED.BIN","DISCNAME.BIN"`.
 - Read the shared file from Main_MiSTer in chunks.
 - Open the destination file through AMSDOS, write chunks, then close it.
 - For AMSDOS-headered shared files, write the correct logical payload and file
@@ -242,8 +245,7 @@ folder.
 
 Preferred route:
 
-- Use the same `|cp` command with source and destination reversed, for example
-  `|cp,"A:DISCNAME.BIN","SHARED.BIN"`.
+- Add `|get,"DISCNAME.BIN","SHARED.BIN"`.
 - Open and read the source file through AMSDOS from the ROM side.
 - Send file bytes to Main_MiSTer using the write transport from Stage 5.
 - Preserve AMSDOS metadata where possible, preferably by writing a valid
