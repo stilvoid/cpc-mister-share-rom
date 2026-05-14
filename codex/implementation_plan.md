@@ -61,6 +61,21 @@ Acceptance:
 - Before loading an index, `|M4DIR` prints `NO M4S INDEX`.
 - After loading a text index, `|M4DIR` prints the downloaded contents.
 
+Second route:
+
+- Add an Amstrad-specific Main_MiSTer helper.
+- Resolve `shared_folder` using the same convention as the existing x86 and
+  Minimig support.
+- Periodically list that folder and push the text listing to the Amstrad core
+  through a tiny write-only `EXT_BUS` protocol.
+- Reuse the Stage 3A FPGA directory index buffer, so `|M4DIR` does not need a
+  new CPC-side protocol yet.
+
+Acceptance:
+
+- With the custom Main_MiSTer binary installed, `|M4DIR` prints a live-ish
+  listing of the configured shared folder without manually loading an index.
+
 ## Stage 4: Real file commands
 
 Implement:

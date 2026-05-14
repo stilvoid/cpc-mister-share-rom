@@ -6,9 +6,11 @@ MiSTer Amstrad CPC core.
 This is deliberately not a full M4 clone. Stage 1 was only a tiny CPC expansion
 ROM that proves the CPC can see the ROM and dispatch an RSX command. Stage 2
 adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory index
-through MiSTer's existing file download path.
+through MiSTer's existing file download path. Stage 3B adds a custom
+Main_MiSTer hook that periodically pushes a live `shared` folder listing through
+`EXT_BUS`.
 
-## Stage 1-3A status
+## Stage 1-3B status
 
 Implemented:
 
@@ -58,12 +60,14 @@ GAMES
   `DIR_BEGIN`.
 - A MiSTer core menu entry `Load M4S index` that accepts a plain text file and
   streams it back via `|M4DIR`.
+- A small Amstrad-specific Main_MiSTer helper that lists the configured
+  `shared` folder and sends it to the core over `EXT_BUS`.
+- A write-only FPGA `EXT_BUS` receiver in `rtl/m4s_hps_ext.sv` that loads that
+  live listing into the same directory index buffer used by `Load M4S index`.
 
 Not implemented yet:
 
 - Real storage commands.
-- HPS communication.
-- Live host folder enumeration.
 - AMSDOS interception.
 - M4 compatibility.
 
@@ -147,7 +151,8 @@ If you use USB storage or another MiSTer games path, use the equivalent
 Then start or reset the Amstrad core so the expansion ROM is visible during the
 CPC firmware ROM walk.
 
-The `install` target deploys both the expansion ROM and the built core:
+The `install` target deploys the expansion ROM, the built core, and the custom
+Main_MiSTer binary:
 
 ```sh
 make install
@@ -158,8 +163,10 @@ Defaults:
 ```text
 MISTER_HOST=root@mister
 MISTER_ROM=/media/usb0/games/Amstrad/boot.e09
-MISTER_CORE=/media/fat/Amstrad.rbf
+MISTER_CORE=/media/fat/_Computer/Amstrad.rbf
+MISTER_MAIN=/media/fat/MiSTer
 CORE_RBF=build/remote/Amstrad.rbf
+MAIN_BIN=../Main_MiSTer/bin/MiSTer
 ```
 
 Override these if your MiSTer uses different paths.
@@ -169,6 +176,9 @@ Override these if your MiSTer uses different paths.
 If your development machine cannot run Quartus, use an x86_64 remote builder.
 See `docs/remote_build.md` for the EC2/Docker workflow used to compile the
 modified `Amstrad_MiSTer` core.
+
+The custom Main_MiSTer binary is built locally with `make -C ../Main_MiSTer`;
+only the FPGA core build uses the remote Quartus builder.
 
 ## Stage 3A M4S index loading
 
@@ -196,6 +206,30 @@ GAMES
 
 The index buffer is currently 2048 bytes and is treated as zero-terminated. If
 no index has been loaded, `|M4DIR` prints `NO M4S INDEX`.
+
+## Stage 3B live shared folder listing
+
+With the matching custom Main_MiSTer binary installed, Main_MiSTer periodically
+enumerates the configured shared folder and pushes a text listing into the core.
+
+The base folder follows Main_MiSTer's existing convention:
+
+- `shared_folder=/absolute/path` uses that absolute path.
+- `shared_folder=relative/path` resolves below `HomeDir()`.
+- an empty `shared_folder` defaults to `HomeDir()/shared`.
+
+The folder is created if it does not already exist. The current listing format
+is deliberately simple:
+
+```text
+M4S SHARED
+FILE.BAS
+GAMES/
+```
+
+Directory names are suffixed with `/`. The listing is capped to the same
+2048-byte index buffer as Stage 3A. This is still a directory-listing proof of
+concept; file open/read/write commands are separate later work.
 
 ## Testing `|HELLO` in BASIC
 
@@ -241,7 +275,8 @@ Keep the boundary clear:
 
 ```text
 rtl/m4s_mailbox.sv           FPGA-side command/status/data mailbox scaffold
-rom/m4s_rom.asm              Stage 1 CPC expansion ROM
+rtl/m4s_hps_ext.sv           FPGA-side HPS directory index receiver
+rom/m4s_rom.asm              CPC expansion ROM
 rom/m4s_protocol.inc         Future Z80-side protocol constants
 Makefile                     ROM build and install rules
 scripts/build_rom.sh         Compatibility wrapper around make
