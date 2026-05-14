@@ -3,10 +3,11 @@
 Experimental scaffold for adding a folder-backed mass-storage device to the
 MiSTer Amstrad CPC core.
 
-This is deliberately not a full M4 clone. Stage 1 is only a tiny CPC expansion
-ROM that proves the CPC can see the ROM and dispatch an RSX command.
+This is deliberately not a full M4 clone. Stage 1 was only a tiny CPC expansion
+ROM that proves the CPC can see the ROM and dispatch an RSX command. Stage 2
+adds a minimal CPC-to-FPGA mailbox and a hardcoded directory response.
 
-## Stage 1 status
+## Stage 1 and 2 status
 
 Implemented:
 
@@ -30,11 +31,28 @@ Expected output:
 M4S ROM OK
 ```
 
+- A second RSX command:
+
+```basic
+|M4DIR
+```
+
+Expected Stage 2 output when the matching MiSTer core RTL is built:
+
+```text
+M4S MOCK DIR
+README.TXT
+HELLO.BAS
+```
+
+- A mock FPGA mailbox in `rtl/m4s_mailbox.sv` for commands `PING` and
+  `DIR_BEGIN`.
+
 Not implemented yet:
 
-- Storage commands.
+- Real storage commands.
 - HPS communication.
-- FPGA mailbox use.
+- Host-backed FPGA mailbox use.
 - AMSDOS interception.
 - M4 compatibility.
 
@@ -118,6 +136,29 @@ If you use USB storage or another MiSTer games path, use the equivalent
 Then start or reset the Amstrad core so the expansion ROM is visible during the
 CPC firmware ROM walk.
 
+The `install` target deploys both the expansion ROM and the built core:
+
+```sh
+make install
+```
+
+Defaults:
+
+```text
+MISTER_HOST=root@mister
+MISTER_ROM=/media/usb0/games/Amstrad/boot.e09
+MISTER_CORE=/media/fat/Amstrad.rbf
+CORE_RBF=build/remote/Amstrad.rbf
+```
+
+Override these if your MiSTer uses different paths.
+
+## Remote core build
+
+If your development machine cannot run Quartus, use an x86_64 remote builder.
+See `docs/remote_build.md` for the EC2/Docker workflow used to compile the
+modified `Amstrad_MiSTer` core.
+
 ## Testing `|HELLO` in BASIC
 
 1. Build the ROM:
@@ -149,7 +190,7 @@ ROM prefix before looking at any future mailbox work.
 ## Stage 2 notes
 
 Stage 2 should add the simplest possible CPC-to-core mailbox path, still without
-host filesystem access. The ROM can then grow a second command such as `|DIR`
+host filesystem access. The ROM can then grow a second command such as `|M4DIR`
 that requests a hardcoded response from FPGA-side logic.
 
 Keep the boundary clear:

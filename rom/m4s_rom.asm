@@ -1,18 +1,20 @@
 ; SPDX-License-Identifier: GPL-2.0-or-later
-; CPC MiSTer Mass Storage experiment - Stage 1 ROM.
+; CPC MiSTer Mass Storage experiment ROM.
 ;
 ; This is a deliberately small Amstrad CPC background expansion ROM.  It
-; registers one RSX command with the CPC firmware:
+; registers RSX commands with the CPC firmware:
 ;
 ;     |HELLO
+;     |M4DIR
 ;
-; Running the command prints:
+; Running |HELLO prints:
 ;
 ;     M4S ROM OK
 ;
-; No storage, MiSTer mailbox, HPS, or FPGA communication is used in Stage 1.
+; Running |M4DIR reads a mock directory stream from the experimental FPGA
+; mailbox ports.  No HPS or host filesystem communication is used yet.
 
-        include "m4s_protocol.inc"       ; Kept for future stages; unused here.
+        include "m4s_protocol.inc"       ; Mailbox port and command constants.
 
 KL_ROM_BASE     equ &C000
 TXT_OUTPUT      equ &BB5A                ; Firmware: print character in A.
@@ -42,6 +44,7 @@ rom_prefix:
 
         jp rom_init                      ; Entry 0: firmware power-up entry.
         jp rsx_hello                     ; Entry 1: BASIC command |HELLO.
+        jp rsx_m4dir                     ; Entry 2: BASIC command |M4DIR.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -56,6 +59,7 @@ rom_prefix:
 command_names:
         db "M4S BOO", &D4                ; Entry 0: rom_init ("T" + bit 7).
         db "HELL", &CF                   ; Entry 1: rsx_hello ("O" + bit 7).
+        db "M4DI", &D2                   ; Entry 2: rsx_m4dir ("R" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -95,6 +99,59 @@ rom_init:
 rsx_hello:
         ld hl, msg_hello
         call print_string
+        ret
+
+; ---------------------------------------------------------------------------
+; |M4DIR RSX implementation.
+;
+; Stage 2 proves the Z80-to-FPGA mailbox by issuing DIR_BEGIN and printing the
+; returned zero-terminated byte stream.  The FPGA currently supplies hardcoded
+; mock data.
+; ---------------------------------------------------------------------------
+rsx_m4dir:
+        ld a, M4S_CMD_DIR_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+rsx_m4dir_loop:
+        call mailbox_read_byte
+        ret nc
+        or a
+        ret z
+        call TXT_OUTPUT
+        jr rsx_m4dir_loop
+
+; Wait for one byte from the mailbox.
+;
+; Carry set:   A contains a byte read from DATA.
+; Carry clear: no byte is available, the stream ended, or the mailbox signalled
+;              error/timeout.
+mailbox_read_byte:
+        ld de, 0
+
+mailbox_wait:
+        ld bc, M4S_PORT_STATUS
+        in a, (c)
+        bit 3, a                         ; ERROR.
+        jr nz, mailbox_no_byte
+        bit 0, a                         ; DATA_READY.
+        jr nz, mailbox_get_byte
+        bit 4, a                         ; END_OF_STREAM.
+        jr nz, mailbox_no_byte
+
+        dec de
+        ld a, d
+        or e
+        jr nz, mailbox_wait
+
+mailbox_no_byte:
+        xor a
+        ret
+
+mailbox_get_byte:
+        ld bc, M4S_PORT_DATA
+        in a, (c)
+        scf
         ret
 
 ; Print a zero-terminated string at HL through the CPC firmware.

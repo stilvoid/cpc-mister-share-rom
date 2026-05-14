@@ -29,13 +29,20 @@ module m4s_mailbox (
     localparam logic [7:0] CMD_PING      = 8'h01;
     localparam logic [7:0] CMD_DIR_BEGIN = 8'h02;
 
-    localparam int MOCK_LEN = 37;
+    localparam logic [7:0] PING_LEN = 8'd9;
+    localparam logic [7:0] DIR_LEN  = 8'd38;
 
     logic [7:0] status;
     logic [7:0] param_reg;
     logic [7:0] command_reg;
     logic [7:0] stream_index;
     logic       stream_active;
+    logic       old_io_rd;
+    logic       old_io_wr;
+    logic [1:0] old_io_addr;
+
+    wire io_rd_fall = old_io_rd && !(io_cs && io_rd);
+    wire io_wr_rise = io_cs && io_wr && !old_io_wr;
 
     // STATUS bit layout
     // bit 0: DATA_READY
@@ -49,48 +56,85 @@ module m4s_mailbox (
         if (!stream_active) status[4] = 1'b1;
     end
 
-    function automatic logic [7:0] mock_byte(input logic [7:0] idx);
+    function automatic logic [7:0] ping_byte(input logic [7:0] idx);
+        begin
+            // "M4S OK\r\n\0"
+            case (idx)
+                8'd0: ping_byte = "M";
+                8'd1: ping_byte = "4";
+                8'd2: ping_byte = "S";
+                8'd3: ping_byte = " ";
+                8'd4: ping_byte = "O";
+                8'd5: ping_byte = "K";
+                8'd6: ping_byte = 8'h0D;
+                8'd7: ping_byte = 8'h0A;
+                default: ping_byte = 8'h00;
+            endcase
+        end
+    endfunction
+
+    function automatic logic [7:0] dir_byte(input logic [7:0] idx);
         begin
             // "M4S MOCK DIR\r\nREADME.TXT\r\nHELLO.BAS\r\n\0"
             case (idx)
-                8'd0:  mock_byte = "M";
-                8'd1:  mock_byte = "4";
-                8'd2:  mock_byte = "S";
-                8'd3:  mock_byte = " ";
-                8'd4:  mock_byte = "M";
-                8'd5:  mock_byte = "O";
-                8'd6:  mock_byte = "C";
-                8'd7:  mock_byte = "K";
-                8'd8:  mock_byte = " ";
-                8'd9:  mock_byte = "D";
-                8'd10: mock_byte = "I";
-                8'd11: mock_byte = "R";
-                8'd12: mock_byte = 8'h0D;
-                8'd13: mock_byte = 8'h0A;
-                8'd14: mock_byte = "R";
-                8'd15: mock_byte = "E";
-                8'd16: mock_byte = "A";
-                8'd17: mock_byte = "D";
-                8'd18: mock_byte = "M";
-                8'd19: mock_byte = "E";
-                8'd20: mock_byte = ".";
-                8'd21: mock_byte = "T";
-                8'd22: mock_byte = "X";
-                8'd23: mock_byte = "T";
-                8'd24: mock_byte = 8'h0D;
-                8'd25: mock_byte = 8'h0A;
-                8'd26: mock_byte = "H";
-                8'd27: mock_byte = "E";
-                8'd28: mock_byte = "L";
-                8'd29: mock_byte = "L";
-                8'd30: mock_byte = "O";
-                8'd31: mock_byte = ".";
-                8'd32: mock_byte = "B";
-                8'd33: mock_byte = "A";
-                8'd34: mock_byte = "S";
-                8'd35: mock_byte = 8'h0D;
-                8'd36: mock_byte = 8'h0A;
-                default: mock_byte = 8'h00;
+                8'd0:  dir_byte = "M";
+                8'd1:  dir_byte = "4";
+                8'd2:  dir_byte = "S";
+                8'd3:  dir_byte = " ";
+                8'd4:  dir_byte = "M";
+                8'd5:  dir_byte = "O";
+                8'd6:  dir_byte = "C";
+                8'd7:  dir_byte = "K";
+                8'd8:  dir_byte = " ";
+                8'd9:  dir_byte = "D";
+                8'd10: dir_byte = "I";
+                8'd11: dir_byte = "R";
+                8'd12: dir_byte = 8'h0D;
+                8'd13: dir_byte = 8'h0A;
+                8'd14: dir_byte = "R";
+                8'd15: dir_byte = "E";
+                8'd16: dir_byte = "A";
+                8'd17: dir_byte = "D";
+                8'd18: dir_byte = "M";
+                8'd19: dir_byte = "E";
+                8'd20: dir_byte = ".";
+                8'd21: dir_byte = "T";
+                8'd22: dir_byte = "X";
+                8'd23: dir_byte = "T";
+                8'd24: dir_byte = 8'h0D;
+                8'd25: dir_byte = 8'h0A;
+                8'd26: dir_byte = "H";
+                8'd27: dir_byte = "E";
+                8'd28: dir_byte = "L";
+                8'd29: dir_byte = "L";
+                8'd30: dir_byte = "O";
+                8'd31: dir_byte = ".";
+                8'd32: dir_byte = "B";
+                8'd33: dir_byte = "A";
+                8'd34: dir_byte = "S";
+                8'd35: dir_byte = 8'h0D;
+                8'd36: dir_byte = 8'h0A;
+                default: dir_byte = 8'h00;
+            endcase
+        end
+    endfunction
+
+    function automatic logic [7:0] stream_len(input logic [7:0] cmd);
+        begin
+            case (cmd)
+                CMD_PING:      stream_len = PING_LEN;
+                CMD_DIR_BEGIN: stream_len = DIR_LEN;
+                default:       stream_len = 8'd0;
+            endcase
+        end
+    endfunction
+
+    function automatic logic [7:0] stream_byte(input logic [7:0] cmd, input logic [7:0] idx);
+        begin
+            case (cmd)
+                CMD_PING:      stream_byte = ping_byte(idx);
+                CMD_DIR_BEGIN: stream_byte = dir_byte(idx);
+                default:       stream_byte = 8'h00;
             endcase
         end
     endfunction
@@ -103,10 +147,16 @@ module m4s_mailbox (
             stream_active  <= 1'b0;
             host_req_valid <= 1'b0;
             host_req_cmd   <= CMD_NOP;
+            old_io_rd      <= 1'b0;
+            old_io_wr      <= 1'b0;
+            old_io_addr    <= 2'b00;
         end else begin
+            old_io_rd <= io_cs && io_rd;
+            old_io_wr <= io_cs && io_wr;
+            if (io_cs && io_rd) old_io_addr <= io_addr;
             host_req_valid <= 1'b0;
 
-            if (io_cs && io_wr) begin
+            if (io_wr_rise) begin
                 unique case (io_addr)
                     REG_PARAM: begin
                         param_reg <= io_din;
@@ -128,8 +178,8 @@ module m4s_mailbox (
                 endcase
             end
 
-            if (io_cs && io_rd && io_addr == REG_DATA && stream_active) begin
-                if (stream_index >= MOCK_LEN-1) begin
+            if (io_rd_fall && old_io_addr == REG_DATA && stream_active) begin
+                if (stream_index >= stream_len(command_reg) - 8'd1) begin
                     stream_active <= 1'b0;
                 end else begin
                     stream_index <= stream_index + 8'd1;
@@ -142,7 +192,7 @@ module m4s_mailbox (
         io_dout = 8'hFF;
         if (io_cs && io_rd) begin
             unique case (io_addr)
-                REG_DATA:   io_dout = mock_byte(stream_index);
+                REG_DATA:   io_dout = stream_byte(command_reg, stream_index);
                 REG_STATUS: io_dout = status;
                 REG_CMD:    io_dout = command_reg;
                 REG_PARAM:  io_dout = param_reg;

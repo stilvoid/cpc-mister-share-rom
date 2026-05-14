@@ -30,7 +30,7 @@ M4S ROM OK
 Run:
 
 ```basic
-|DIR
+|M4DIR
 ```
 
 Expected:
@@ -44,6 +44,6 @@ HELLO.BAS
 ## Debug hints
 
 - If `|HELLO` is unknown, debug ROM header/RSX registration first.
-- If `|HELLO` works but `|DIR` hangs, debug port decode/status bits.
+- If `|HELLO` works but `|M4DIR` hangs, debug port decode/status bits.
 - If bytes are wrong, confirm I/O data direction and read strobe timing.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.
