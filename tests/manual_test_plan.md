@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 1 installed
+ M4S ROM Stage 2.1 installed
 
 ```
 
@@ -25,7 +25,7 @@ Expected:
 M4S ROM OK
 ```
 
-## Stage 2: Mailbox mock directory
+## Stage 2: Mailbox fallback directory
 
 Run:
 
@@ -36,9 +36,27 @@ Run:
 Expected:
 
 ```text
-M4S MOCK DIR
+NO M4S INDEX
+```
+
+## Stage 3A: Preloaded M4S index
+
+1. Open the Amstrad core menu.
+2. Select `Load M4S index`.
+3. Choose `examples/m4s-index.txt` or another plain text index file.
+4. Run:
+
+```basic
+|M4DIR
+```
+
+Expected when using the example file:
+
+```text
+M4S INDEX
 README.TXT
 HELLO.BAS
+GAMES
 ```
 
 ## Debug hints
@@ -46,4 +64,5 @@ HELLO.BAS
 - If `|HELLO` is unknown, debug ROM header/RSX registration first.
 - If `|HELLO` works but `|M4DIR` hangs, debug port decode/status bits.
 - If bytes are wrong, confirm I/O data direction and read strobe timing.
+- If `|M4DIR` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.

@@ -11,13 +11,15 @@
 ;
 ;     M4S ROM OK
 ;
-; Running |M4DIR reads a mock directory stream from the experimental FPGA
-; mailbox ports.  No HPS or host filesystem communication is used yet.
+; Running |M4DIR reads a directory text stream from the experimental FPGA
+; mailbox ports.
 
         include "m4s_protocol.inc"       ; Mailbox port and command constants.
 
 KL_ROM_BASE     equ &C000
 TXT_OUTPUT      equ &BB5A                ; Firmware: print character in A.
+CHAR_CR         equ 13
+CHAR_LF         equ 10
 
         org KL_ROM_BASE
 
@@ -112,13 +114,27 @@ rsx_m4dir:
         ld a, M4S_CMD_DIR_BEGIN
         ld bc, M4S_PORT_COMMAND
         out (c), a
+        xor a
+        ld e, a
 
 rsx_m4dir_loop:
         call mailbox_read_byte
         ret nc
         or a
         ret z
+        cp CHAR_LF
+        jr nz, rsx_m4dir_output
+        ld a, e
+        cp CHAR_CR
+        ld a, CHAR_LF
+        jr z, rsx_m4dir_output
+        push af
+        ld a, CHAR_CR
         call TXT_OUTPUT
+        pop af
+rsx_m4dir_output:
+        call TXT_OUTPUT
+        ld e, a
         jr rsx_m4dir_loop
 
 ; Wait for one byte from the mailbox.
@@ -167,7 +183,7 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 1 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 2.1 installed", 13, 10, 13, 10, 0
 
 ; Expansion ROM images are 16KB.  Pad unused space with &FF, the normal erased
 ; EPROM byte value.  The build script assembles this as a raw binary suitable

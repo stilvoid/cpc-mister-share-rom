@@ -2,7 +2,9 @@
 // Experimental CPC MiSTer Mass Storage mailbox scaffold.
 // Not a full M4 clone. This is a tiny CPC-facing test interface.
 
-module m4s_mailbox (
+module m4s_mailbox #(
+    parameter int DIR_INDEX_BITS = 11
+) (
     input  logic        clk,
     input  logic        reset,
 
@@ -13,6 +15,12 @@ module m4s_mailbox (
     input  logic [1:0]  io_addr,   // 0 DATA, 1 STATUS, 2 COMMAND, 3 PARAM
     input  logic [7:0]  io_din,
     output logic [7:0]  io_dout,
+
+    // Host-loaded text directory index. The stream is treated as zero-terminated.
+    input  logic                        dir_index_begin,
+    input  logic                        dir_index_wr,
+    input  logic [DIR_INDEX_BITS-1:0]   dir_index_addr,
+    input  logic [7:0]                  dir_index_din,
 
     // TODO: Later connect this to a real host/HPS bridge or internal FIFO.
     output logic        host_req_valid,
@@ -29,17 +37,24 @@ module m4s_mailbox (
     localparam logic [7:0] CMD_PING      = 8'h01;
     localparam logic [7:0] CMD_DIR_BEGIN = 8'h02;
 
-    localparam logic [7:0] PING_LEN = 8'd9;
-    localparam logic [7:0] DIR_LEN  = 8'd38;
+    localparam int DIR_INDEX_SIZE = 1 << DIR_INDEX_BITS;
+    localparam logic [DIR_INDEX_BITS-1:0] DIR_INDEX_LAST = {DIR_INDEX_BITS{1'b1}};
+    localparam logic [15:0] DIR_INDEX_MAX_LEN = {{(16-DIR_INDEX_BITS){1'b0}}, DIR_INDEX_LAST} + 16'd1;
+
+    localparam logic [15:0] PING_LEN     = 16'd9;
+    localparam logic [15:0] FALLBACK_LEN = 16'd15;
 
     logic [7:0] status;
     logic [7:0] param_reg;
     logic [7:0] command_reg;
-    logic [7:0] stream_index;
+    logic [15:0] stream_index;
     logic       stream_active;
     logic       old_io_rd;
     logic       old_io_wr;
     logic [1:0] old_io_addr;
+    logic       dir_index_loaded;
+    logic [15:0] dir_index_len;
+    logic [7:0] dir_index_ram [0:DIR_INDEX_SIZE-1];
 
     wire io_rd_fall = old_io_rd && !(io_cs && io_rd);
     wire io_wr_rise = io_cs && io_wr && !old_io_wr;
@@ -73,67 +88,44 @@ module m4s_mailbox (
         end
     endfunction
 
-    function automatic logic [7:0] dir_byte(input logic [7:0] idx);
+    function automatic logic [7:0] fallback_byte(input logic [15:0] idx);
         begin
-            // "M4S MOCK DIR\r\nREADME.TXT\r\nHELLO.BAS\r\n\0"
+            // "NO M4S INDEX\r\n\0"
             case (idx)
-                8'd0:  dir_byte = "M";
-                8'd1:  dir_byte = "4";
-                8'd2:  dir_byte = "S";
-                8'd3:  dir_byte = " ";
-                8'd4:  dir_byte = "M";
-                8'd5:  dir_byte = "O";
-                8'd6:  dir_byte = "C";
-                8'd7:  dir_byte = "K";
-                8'd8:  dir_byte = " ";
-                8'd9:  dir_byte = "D";
-                8'd10: dir_byte = "I";
-                8'd11: dir_byte = "R";
-                8'd12: dir_byte = 8'h0D;
-                8'd13: dir_byte = 8'h0A;
-                8'd14: dir_byte = "R";
-                8'd15: dir_byte = "E";
-                8'd16: dir_byte = "A";
-                8'd17: dir_byte = "D";
-                8'd18: dir_byte = "M";
-                8'd19: dir_byte = "E";
-                8'd20: dir_byte = ".";
-                8'd21: dir_byte = "T";
-                8'd22: dir_byte = "X";
-                8'd23: dir_byte = "T";
-                8'd24: dir_byte = 8'h0D;
-                8'd25: dir_byte = 8'h0A;
-                8'd26: dir_byte = "H";
-                8'd27: dir_byte = "E";
-                8'd28: dir_byte = "L";
-                8'd29: dir_byte = "L";
-                8'd30: dir_byte = "O";
-                8'd31: dir_byte = ".";
-                8'd32: dir_byte = "B";
-                8'd33: dir_byte = "A";
-                8'd34: dir_byte = "S";
-                8'd35: dir_byte = 8'h0D;
-                8'd36: dir_byte = 8'h0A;
-                default: dir_byte = 8'h00;
+                16'd0:  fallback_byte = "N";
+                16'd1:  fallback_byte = "O";
+                16'd2:  fallback_byte = " ";
+                16'd3:  fallback_byte = "M";
+                16'd4:  fallback_byte = "4";
+                16'd5:  fallback_byte = "S";
+                16'd6:  fallback_byte = " ";
+                16'd7:  fallback_byte = "I";
+                16'd8:  fallback_byte = "N";
+                16'd9:  fallback_byte = "D";
+                16'd10: fallback_byte = "E";
+                16'd11: fallback_byte = "X";
+                16'd12: fallback_byte = 8'h0D;
+                16'd13: fallback_byte = 8'h0A;
+                default: fallback_byte = 8'h00;
             endcase
         end
     endfunction
 
-    function automatic logic [7:0] stream_len(input logic [7:0] cmd);
+    function automatic logic [15:0] stream_len(input logic [7:0] cmd);
         begin
             case (cmd)
                 CMD_PING:      stream_len = PING_LEN;
-                CMD_DIR_BEGIN: stream_len = DIR_LEN;
-                default:       stream_len = 8'd0;
+                CMD_DIR_BEGIN: stream_len = dir_index_loaded ? dir_index_len : FALLBACK_LEN;
+                default:       stream_len = 16'd0;
             endcase
         end
     endfunction
 
-    function automatic logic [7:0] stream_byte(input logic [7:0] cmd, input logic [7:0] idx);
+    function automatic logic [7:0] stream_byte(input logic [7:0] cmd, input logic [15:0] idx);
         begin
             case (cmd)
-                CMD_PING:      stream_byte = ping_byte(idx);
-                CMD_DIR_BEGIN: stream_byte = dir_byte(idx);
+                CMD_PING:      stream_byte = ping_byte(idx[7:0]);
+                CMD_DIR_BEGIN: stream_byte = dir_index_loaded ? dir_index_ram[idx[DIR_INDEX_BITS-1:0]] : fallback_byte(idx);
                 default:       stream_byte = 8'h00;
             endcase
         end
@@ -143,8 +135,10 @@ module m4s_mailbox (
         if (reset) begin
             param_reg      <= 8'h00;
             command_reg    <= CMD_NOP;
-            stream_index   <= 8'h00;
+            stream_index   <= 16'h0000;
             stream_active  <= 1'b0;
+            dir_index_loaded <= 1'b0;
+            dir_index_len  <= FALLBACK_LEN;
             host_req_valid <= 1'b0;
             host_req_cmd   <= CMD_NOP;
             old_io_rd      <= 1'b0;
@@ -155,6 +149,25 @@ module m4s_mailbox (
             old_io_wr <= io_cs && io_wr;
             if (io_cs && io_rd) old_io_addr <= io_addr;
             host_req_valid <= 1'b0;
+
+            if (dir_index_begin) begin
+                dir_index_loaded <= 1'b0;
+                dir_index_len <= 16'd1;
+                dir_index_ram[0] <= 8'h00;
+            end
+
+            if (dir_index_wr) begin
+                dir_index_loaded <= 1'b1;
+                dir_index_ram[dir_index_addr] <= dir_index_din;
+                if (!dir_index_loaded || ({5'd0, dir_index_addr} >= dir_index_len)) begin
+                    if (dir_index_addr != DIR_INDEX_LAST) begin
+                        dir_index_len <= {5'd0, dir_index_addr} + 16'd2;
+                        dir_index_ram[dir_index_addr + {{(DIR_INDEX_BITS-1){1'b0}}, 1'b1}] <= 8'h00;
+                    end else begin
+                        dir_index_len <= DIR_INDEX_MAX_LEN;
+                    end
+                end
+            end
 
             if (io_wr_rise) begin
                 unique case (io_addr)
@@ -167,7 +180,7 @@ module m4s_mailbox (
                         host_req_valid <= 1'b1;
 
                         if (io_din == CMD_PING || io_din == CMD_DIR_BEGIN) begin
-                            stream_index <= 8'h00;
+                            stream_index <= 16'h0000;
                             stream_active <= 1'b1;
                         end
                     end
@@ -179,10 +192,10 @@ module m4s_mailbox (
             end
 
             if (io_rd_fall && old_io_addr == REG_DATA && stream_active) begin
-                if (stream_index >= stream_len(command_reg) - 8'd1) begin
+                if (stream_index >= stream_len(command_reg) - 16'd1) begin
                     stream_active <= 1'b0;
                 end else begin
-                    stream_index <= stream_index + 8'd1;
+                    stream_index <= stream_index + 16'd1;
                 end
             end
         end

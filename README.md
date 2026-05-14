@@ -5,9 +5,10 @@ MiSTer Amstrad CPC core.
 
 This is deliberately not a full M4 clone. Stage 1 was only a tiny CPC expansion
 ROM that proves the CPC can see the ROM and dispatch an RSX command. Stage 2
-adds a minimal CPC-to-FPGA mailbox and a hardcoded directory response.
+adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory index
+through MiSTer's existing file download path.
 
-## Stage 1 and 2 status
+## Stage 1-3A status
 
 Implemented:
 
@@ -15,7 +16,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 1 installed
+ M4S ROM Stage 2.1 installed
 
 ```
 
@@ -37,22 +38,32 @@ M4S ROM OK
 |M4DIR
 ```
 
-Expected Stage 2 output when the matching MiSTer core RTL is built:
+Expected output before an index file is loaded:
 
 ```text
-M4S MOCK DIR
+NO M4S INDEX
+```
+
+Expected output after loading `examples/m4s-index.txt` through the core menu's
+`Load M4S index` item:
+
+```text
+M4S INDEX
 README.TXT
 HELLO.BAS
+GAMES
 ```
 
 - A mock FPGA mailbox in `rtl/m4s_mailbox.sv` for commands `PING` and
   `DIR_BEGIN`.
+- A MiSTer core menu entry `Load M4S index` that accepts a plain text file and
+  streams it back via `|M4DIR`.
 
 Not implemented yet:
 
 - Real storage commands.
 - HPS communication.
-- Host-backed FPGA mailbox use.
+- Live host folder enumeration.
 - AMSDOS interception.
 - M4 compatibility.
 
@@ -159,6 +170,33 @@ If your development machine cannot run Quartus, use an x86_64 remote builder.
 See `docs/remote_build.md` for the EC2/Docker workflow used to compile the
 modified `Amstrad_MiSTer` core.
 
+## Stage 3A M4S index loading
+
+This stage does not enumerate MiSTer's `shared` folder live. Instead, it uses
+the Amstrad core's existing menu file download mechanism to preload a small text
+index into FPGA RAM.
+
+1. Copy or create a plain text index file on MiSTer, for example:
+
+```text
+M4S INDEX
+README.TXT
+HELLO.BAS
+GAMES
+```
+
+2. Open the Amstrad core menu.
+3. Select `Load M4S index`.
+4. Choose the text file.
+5. In BASIC, run:
+
+```basic
+|M4DIR
+```
+
+The index buffer is currently 2048 bytes and is treated as zero-terminated. If
+no index has been loaded, `|M4DIR` prints `NO M4S INDEX`.
+
 ## Testing `|HELLO` in BASIC
 
 1. Build the ROM:
@@ -170,7 +208,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 1 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 2.1 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 
