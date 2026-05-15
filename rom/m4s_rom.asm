@@ -21,6 +21,7 @@
 ;     |cp,"SRC","DST"
 ;     |rm,"FILE"
 ;     |diskread,"DISCFILE","shared/path"
+;     |diskread,"DISCFILE","shared/path",0
 ;
 ; Running |HELLO prints:
 ;
@@ -50,6 +51,9 @@ M4S_IMPORT_BLOCK equ &9804               ; 16-bit bytes left in AMSDOS buffer.
 M4S_IMPORT_CHUNK equ &9806               ; 8-bit current shared write length.
 M4S_IMPORT_REQ_TYPE equ &9807            ; "S" create/truncate or "W" patch.
 M4S_IMPORT_DONE equ &9808                ; 16-bit diskread payload bytes sent.
+M4S_IMPORT_SRC_DESC equ &980A            ; 16-bit diskread source descriptor.
+M4S_IMPORT_DST_DESC equ &980C            ; 16-bit diskread destination descriptor.
+M4S_IMPORT_HEADER_MODE equ &980E         ; Non-zero means prepend AMSDOS header.
 
         org KL_ROM_BASE
 
@@ -950,7 +954,7 @@ rsx_rm_output:
         jr rsx_rm_loop
 
 ; ---------------------------------------------------------------------------
-; |diskread,"discfile","shared/path" RSX implementation.
+; |diskread,"discfile","shared/path"[,preserve_header] RSX implementation.
 ;
 ; Reads a file through AMSDOS from the currently selected CPC disk and writes it
 ; to the current shared folder.  The host refuses an existing destination, so an
@@ -958,14 +962,38 @@ rsx_rm_output:
 ; ---------------------------------------------------------------------------
 rsx_diskread:
         cp 2
-        jr z, rsx_import_have_params
+        jr z, rsx_import_two_params
+        cp 3
+        jr z, rsx_import_three_params
         ld hl, msg_import_usage
         call print_string
         ret
 
+rsx_import_two_params:
+        ld l, (ix+2)                     ; First BASIC arg: disk filename.
+        ld h, (ix+3)
+        ld (M4S_IMPORT_SRC_DESC), hl
+        ld l, (ix+0)                     ; Second BASIC arg: shared path.
+        ld h, (ix+1)
+        ld (M4S_IMPORT_DST_DESC), hl
+        ld a, 1
+        ld (M4S_IMPORT_HEADER_MODE), a
+        jr rsx_import_have_params
+
+rsx_import_three_params:
+        ld l, (ix+4)                     ; First BASIC arg: disk filename.
+        ld h, (ix+5)
+        ld (M4S_IMPORT_SRC_DESC), hl
+        ld l, (ix+2)                     ; Second BASIC arg: shared path.
+        ld h, (ix+3)
+        ld (M4S_IMPORT_DST_DESC), hl
+        ld a, (ix+0)                     ; Third BASIC arg: 0 strips header.
+        ld h, (ix+1)
+        or h
+        ld (M4S_IMPORT_HEADER_MODE), a
+
 rsx_import_have_params:
-        ld l, (ix+2)
-        ld h, (ix+3)                     ; HL = disk filename descriptor.
+        ld hl, (M4S_IMPORT_SRC_DESC)      ; HL = disk filename descriptor.
         ld a, (hl)
         or a
         jr nz, rsx_import_source_nonempty
@@ -974,8 +1002,7 @@ rsx_import_have_params:
         ret
 
 rsx_import_source_nonempty:
-        ld l, (ix+0)
-        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         ld a, (hl)
         or a
         jr nz, rsx_import_nonempty
@@ -984,8 +1011,7 @@ rsx_import_source_nonempty:
         ret
 
 rsx_import_nonempty:
-        ld l, (ix+2)
-        ld h, (ix+3)                     ; HL = disk filename descriptor.
+        ld hl, (M4S_IMPORT_SRC_DESC)      ; HL = disk filename descriptor.
         ld b, (hl)                       ; B = filename length.
         inc hl
         ld e, (hl)
@@ -1101,8 +1127,13 @@ rsx_import_close_done:
         call CAS_IN_CLOSE
         pop ix
         call import_print_done
+        ld a, (M4S_IMPORT_HEADER_MODE)
+        or a
+        jr z, rsx_import_done
         call import_prepend_saved_header
         jp nc, rsx_import_error
+
+rsx_import_done:
         ld hl, msg_import_done
         call print_string
         ret
@@ -1274,8 +1305,7 @@ import_create_destination:
         ld a, ":"
         out (c), a
 
-        ld l, (ix+0)
-        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         call mv_send_descriptor
 
         xor a
@@ -1336,8 +1366,7 @@ import_prepend_header_half:
         ld a, ":"
         out (c), a
 
-        ld l, (ix+0)
-        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         call mv_send_descriptor
 
         ld a, ":"
@@ -1415,8 +1444,7 @@ import_send_typed_chunk_request:
         ld bc, M4S_PORT_DATA
         out (c), a
 
-        ld l, (ix+0)
-        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         call mv_send_descriptor
 
         ld a, ":"
@@ -2151,7 +2179,7 @@ msg_rm_usage:
         db "Usage: |rm,", 34, "FILE", 34, 13, 10, 0
 
 msg_import_usage:
-        db "Usage: |diskread,", 34, "DISC", 34, ",", 34, "SHARED", 34, 13, 10, 0
+        db "Usage: |diskread,", 34, "DISC", 34, ",", 34, "SHARED", 34, "[,0]", 13, 10, 0
 
 msg_import_open_len:
         db "OPEN=", 0
