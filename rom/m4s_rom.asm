@@ -20,6 +20,7 @@
 ;     |mv,"OLD","NEW"
 ;     |cp,"SRC","DST"
 ;     |rm,"FILE"
+;     |diskread,"DISCFILE","shared/path"
 ;
 ; Running |HELLO prints:
 ;
@@ -33,9 +34,17 @@
 KL_ROM_BASE     equ &C000
 KM_WAIT_CHAR    equ &BB06                ; Firmware: wait for a keypress.
 TXT_OUTPUT      equ &BB5A                ; Firmware: print character in A.
+CAS_IN_OPEN     equ &BC77                ; Firmware: open AMSDOS input file.
+CAS_IN_CLOSE    equ &BC7A                ; Firmware: close AMSDOS input file.
+CAS_IN_CHAR     equ &BC80                ; Firmware: read byte from AMSDOS input.
+CAS_IN_DIRECT   equ &BC83                ; Firmware: read file directly to RAM.
 CHAR_CR         equ 13
 CHAR_LF         equ 10
 M4S_LOAD_ADDR   equ &4000
+M4S_DISC_BUFFER equ &B800                ; 2KB AMSDOS input buffer.
+M4S_IMPORT_BUFFER equ &7800              ; 64-byte disk-to-shared chunk buffer.
+M4S_IMPORT_LOAD equ &2000                ; Scratch load address for diskread.
+M4S_IMPORT_MAX  equ M4S_DISC_BUFFER - M4S_IMPORT_LOAD
 
         org KL_ROM_BASE
 
@@ -75,6 +84,7 @@ rom_prefix:
         jp rsx_mv                        ; Entry 12: BASIC command |mv.
         jp rsx_cp                        ; Entry 13: BASIC command |cp.
         jp rsx_rm                        ; Entry 14: BASIC command |rm.
+        jp rsx_diskread                  ; Entry 15: BASIC command |diskread.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -102,6 +112,7 @@ command_names:
         db "M", &D6                      ; Entry 12: rsx_mv ("V" + bit 7).
         db "C", &D0                      ; Entry 13: rsx_cp ("P" + bit 7).
         db "R", &CD                      ; Entry 14: rsx_rm ("M" + bit 7).
+        db "DISKREA", &C4                ; Entry 15: rsx_diskread ("D" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -934,6 +945,280 @@ rsx_rm_output:
         jr rsx_rm_loop
 
 ; ---------------------------------------------------------------------------
+; |diskread,"discfile","shared/path" RSX implementation.
+;
+; Reads a file through AMSDOS from the currently selected CPC disk and writes it
+; to the current shared folder.  The host refuses an existing destination, so an
+; interrupted disk read is visible rather than silently replacing a good file.
+; ---------------------------------------------------------------------------
+rsx_diskread:
+        cp 2
+        jr z, rsx_import_have_params
+        ld hl, msg_import_usage
+        call print_string
+        ret
+
+rsx_import_have_params:
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = disk filename descriptor.
+        ld a, (hl)
+        or a
+        jr nz, rsx_import_source_nonempty
+        ld hl, msg_import_usage
+        call print_string
+        ret
+
+rsx_import_source_nonempty:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        ld a, (hl)
+        or a
+        jr nz, rsx_import_nonempty
+        ld hl, msg_import_usage
+        call print_string
+        ret
+
+rsx_import_nonempty:
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = disk filename descriptor.
+        ld b, (hl)                       ; B = filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        ex de, hl                        ; HL = disk filename data.
+        ld de, M4S_DISC_BUFFER           ; DE = 2KB AMSDOS buffer.
+        push ix
+        call CAS_IN_OPEN
+        pop ix
+        jp nc, rsx_import_error
+
+        ld de, 24                         ; AMSDOS logical length field.
+        add hl, de
+        ld c, (hl)
+        inc hl
+        ld b, (hl)                        ; BC = file payload length.
+        ld a, b
+        cp M4S_IMPORT_MAX / 256
+        jr c, rsx_import_length_ok
+        jp nz, rsx_import_close_error
+        ld a, c
+        or a
+        jp nz, rsx_import_close_error
+
+rsx_import_length_ok:
+        push bc                           ; Preserve length in IY across the
+        pop iy                            ; direct load and write loop.
+        ld hl, M4S_IMPORT_LOAD            ; Load into scratch RAM, not the
+                                          ; file header's execution address.
+        push ix
+        call CAS_IN_DIRECT
+        pop ix
+        jr nc, rsx_import_direct_error
+        ld hl, M4S_IMPORT_LOAD            ; HL = loaded payload source.
+        ld de, 0                         ; DE = shared destination file offset.
+
+rsx_import_memory_chunk:
+        push iy
+        pop bc                            ; BC = bytes left to write.
+        ld a, b
+        or c
+        jr z, rsx_import_close_done
+
+        ld a, b
+        or a
+        jr nz, rsx_import_memory_chunk_64
+        ld a, c
+        cp 65
+        jr c, rsx_import_memory_chunk_ready
+
+rsx_import_memory_chunk_64:
+        ld a, 64
+
+rsx_import_memory_chunk_ready:
+        call import_send_memory_chunk
+        jr nc, rsx_import_close_error
+        jr rsx_import_memory_chunk
+
+rsx_import_close_done:
+        push ix
+        call CAS_IN_CLOSE
+        pop ix
+        ld hl, msg_import_done
+        call print_string
+        ret
+
+rsx_import_direct_error:
+        jr rsx_import_close_error
+
+import_send_memory_chunk:
+        push af
+        ld a, d
+        or e
+        jr nz, import_send_memory_chunk_now
+
+        push hl
+        push de
+        call import_create_destination
+        jr nc, import_create_destination_failed
+        pop de
+        pop hl
+
+import_send_memory_chunk_now:
+        pop af
+        push af
+        call import_send_chunk_request
+        jr nc, import_send_memory_failed
+
+        pop af
+
+import_advance_pointers:
+        inc hl
+        inc de
+        dec iy
+        dec a
+        jr nz, import_advance_pointers
+        ld a, d
+        or e
+        jr z, import_chunk_failed        ; Stop at the 64KB proof limit.
+        scf
+        ret
+
+import_create_destination_failed:
+        pop de
+        pop hl
+        pop af
+        jr import_chunk_failed
+
+import_send_memory_failed:
+        pop af
+
+import_chunk_failed:
+        or a
+        ret
+
+rsx_import_close_error:
+        push ix
+        call CAS_IN_CLOSE
+        pop ix
+
+rsx_import_error:
+        ld hl, msg_import_error
+        call print_string
+        ret
+
+import_create_destination:
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "F"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        call mv_send_descriptor
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        call m4load_read_byte
+        jr nc, import_response_failed
+        cp "O"
+        jr nz, import_response_failed
+        scf
+        ret
+
+import_response_failed:
+        or a
+        ret
+
+; Send request "S:OOOO:NN:filename:HEX", where OOOO is the file offset in DE,
+; NN is the chunk length in A, and HL points at the chunk data.
+import_send_chunk_request:
+        push hl
+        push de
+        push bc
+        push af
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "S"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        ld a, d
+        call m4load_send_hex_byte
+        ld a, e
+        call m4load_send_hex_byte
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop af
+        push af
+        call m4load_send_hex_byte
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        call mv_send_descriptor
+
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop af
+        pop bc
+        pop de
+        pop hl
+        push hl
+        push de
+        push bc
+        push af
+
+        ld e, a
+
+import_send_chunk_data:
+        ld a, (hl)
+        call m4load_send_hex_byte
+        inc hl
+        dec e
+        jr nz, import_send_chunk_data
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop af
+        pop bc
+        pop de
+        pop hl
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        call m4load_read_byte
+        jr nc, import_response_failed
+        cp "O"
+        jr nz, import_response_failed
+        scf
+        ret
+
+; ---------------------------------------------------------------------------
 ; |savem,"filename",&addr,&length RSX implementation.
 ;
 ; Stage 4 write proof.  This saves a CPC memory range to a file in the current
@@ -1515,6 +1800,9 @@ m4save_send_data:
 ; Carry clear: no byte is available, the stream ended, or the mailbox signalled
 ;              error/timeout.
 mailbox_read_byte:
+        ld hl, 16
+
+mailbox_wait_outer:
         ld de, 0
 
 mailbox_wait:
@@ -1531,6 +1819,11 @@ mailbox_wait:
         ld a, d
         or e
         jr nz, mailbox_wait
+
+        dec hl
+        ld a, h
+        or l
+        jr nz, mailbox_wait_outer
 
 mailbox_no_byte:
         xor a
@@ -1555,7 +1848,7 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.13 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.14 installed", 13, 10, 13, 10, 0
 
 msg_ls_usage:
         db "Usage: |ls,", 34, "DIR", 34, 13, 10, 0
@@ -1586,6 +1879,15 @@ msg_cp_usage:
 
 msg_rm_usage:
         db "Usage: |rm,", 34, "FILE", 34, 13, 10, 0
+
+msg_import_usage:
+        db "Usage: |diskread,", 34, "DISC", 34, ",", 34, "SHARED", 34, 13, 10, 0
+
+msg_import_done:
+        db "Disk read OK", 13, 10, 0
+
+msg_import_error:
+        db "Disk read failed", 13, 10, 0
 
 msg_load_usage:
         db "Usage: |loadm,", 34, "FILE.BIN", 34, ",&8000", 13, 10, 0

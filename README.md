@@ -15,8 +15,12 @@ then adds a first chunked binary load proof with `|loadm,"FILE.BIN"`. Stage
 4.5 adds `|cd` navigation within the shared folder. Stage 4.6 adds a first raw
 memory save proof with `|savem,"FILE.BIN",&4000,&0100`. Stage 4.7 adds the
 Unix-like command aliases. Stage 4.8 adds `|mkdir`, the first shared-folder
-management command. Stage 4.9 adds conservative `|mv` rename support. Stage 4.10 adds
-file-only `|rm` removal. Stage 4.11 adds optional path arguments for `|ls`. Stage 4.12 replaces `|cat` with `|type` and drops the old public `M4*` command names. Stage 4.13 adds shared-to-shared `|cp`.
+management command. Stage 4.9 adds conservative `|mv` rename support. Stage
+4.10 adds file-only `|rm` removal. Stage 4.11 adds optional path arguments for
+`|ls`. Stage 4.12 replaces `|cat` with `|type` and drops the old public `M4*`
+command names. Stage 4.13 adds shared-to-shared `|cp`. Stage 4.14 starts disk
+interaction with `|diskread`, copying a file from the currently selected CPC disk
+into the shared folder.
 
 ## Stage 1-4 status
 
@@ -26,7 +30,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.13 installed
+ M4S ROM Stage 4.14 installed
 
 ```
 
@@ -87,20 +91,22 @@ GAMES
   address, and jumps to the AMSDOS entry address.
 - A proof `|savem,"FILE.BIN",&4000,&0100` command that saves a CPC memory
   range to a file in the current shared folder using small ASCII-hex chunks.
+- A proof `|diskread,"DISCFILE.BIN","shared.bin"` command that reads a file from
+  the current CPC disk through AMSDOS and writes it to the shared folder.
 
 Not implemented yet:
 
 - General file open/read/write commands beyond the proof RSX helpers.
 - BASIC program save/load helpers.
-- Explicit copy commands between the shared folder and a mounted CPC disk.
+- Export from the shared folder back to a mounted CPC disk.
 - Broader file management such as recursive directory removal, overwrite modes,
   and wildcard operations.
 
 User-facing commands now use Unix-like RSX names where they do not collide with
 common CPC disk ROMs. Avoid `|DIR`, `|ERA`, and `|REN` as primary names because
 AMSDOS already uses them. Preferred names are `|ls`, `|cd`, `|pwd`, `|type`, `|stat`,
-`|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|get`, `|put`,
-`|mkdir`, `|mv`, `|cp`, and `|rm`.
+`|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|diskread`,
+`|diskwrite`, `|mkdir`, `|mv`, `|cp`, and `|rm`.
 
 ## How CPC expansion ROMs work
 
@@ -454,6 +460,23 @@ destinations.
 The command refuses path separators, `..`, and directories. It is deliberately
 not recursive.
 
+## Stage 4K read files from disk
+
+`|diskread` copies one file from the currently selected AMSDOS disk into the
+shared folder:
+
+```basic
+|diskread,"DISCFILE.BIN","shared/discfile.bin"
+```
+
+The first argument is the CPC disk filename. The second argument is the shared
+folder destination path, resolved using the same relative path rules as `|cp`
+and `|savem`. The host refuses existing destinations. The first implementation
+uses AMSDOS direct load into scratch RAM at `&2000`, with a 2KB AMSDOS buffer
+at `&B800`. It writes the loaded payload to the shared folder in 64-byte chunks
+and keeps the same 16-bit offset limit as the other proof write paths. It
+currently copies the payload only, not the 128-byte AMSDOS header.
+
 ## Testing `|HELLO` in BASIC
 
 1. Build the ROM:
@@ -465,7 +488,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.13 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.14 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 
