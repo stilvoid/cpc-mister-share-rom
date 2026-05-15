@@ -5,22 +5,12 @@
 ; registers RSX commands with the CPC firmware:
 ;
 ;     |HELLO
-;     |M4DIR
-;     |M4CD
-;     |M4CD,"DIR"
-;     |M4TYPE,"FILE.TXT"
-;     |M4DUMP,"FILE.BIN"
-;     |M4INFO,"FILE.BIN"
-;     |M4LOAD,"FILE.BIN"
-;     |M4LOAD,"FILE.BIN",&8000
-;     |M4LOADH,"FILE.BIN"
-;     |M4SAVE,"FILE.BIN",&4000,&0100
 ;     |ls
 ;     |ls,"DIR"
 ;     |cd
 ;     |cd,"DIR"
 ;     |pwd
-;     |cat,"FILE.TXT"
+;     |type,"FILE.TXT"
 ;     |hexdump,"FILE.BIN"
 ;     |xxd,"FILE.BIN"
 ;     |stat,"FILE.BIN"
@@ -35,7 +25,7 @@
 ;
 ;     M4S ROM OK
 ;
-; Running |M4DIR reads a directory text stream from the experimental FPGA
+; Running |ls reads a directory text stream from the experimental FPGA
 ; mailbox ports.
 
         include "m4s_protocol.inc"       ; Mailbox port and command constants.
@@ -72,27 +62,19 @@ rom_prefix:
 
         jp rom_init                      ; Entry 0: firmware power-up entry.
         jp rsx_hello                     ; Entry 1: BASIC command |HELLO.
-        jp rsx_m4dir                     ; Entry 2: BASIC command |M4DIR.
-        jp rsx_m4type                    ; Entry 3: BASIC command |M4TYPE.
-        jp rsx_m4dump                    ; Entry 4: BASIC command |M4DUMP.
-        jp rsx_m4load                    ; Entry 5: BASIC command |M4LOAD.
-        jp rsx_m4info                    ; Entry 6: BASIC command |M4INFO.
-        jp rsx_m4loadh                   ; Entry 7: BASIC command |M4LOADH.
-        jp rsx_m4cd                      ; Entry 8: BASIC command |M4CD.
-        jp rsx_m4save                    ; Entry 9: BASIC command |M4SAVE.
-        jp rsx_m4dir                     ; Entry 10: BASIC command |ls.
-        jp rsx_m4cd                      ; Entry 11: BASIC command |cd.
-        jp rsx_pwd                       ; Entry 12: BASIC command |pwd.
-        jp rsx_m4type                    ; Entry 13: BASIC command |cat.
-        jp rsx_m4dump                    ; Entry 14: BASIC command |hexdump.
-        jp rsx_m4dump                    ; Entry 15: BASIC command |xxd.
-        jp rsx_m4info                    ; Entry 16: BASIC command |stat.
-        jp rsx_m4load                    ; Entry 17: BASIC command |loadm.
-        jp rsx_m4save                    ; Entry 18: BASIC command |savem.
-        jp rsx_m4loadh                   ; Entry 19: BASIC command |exec.
-        jp rsx_mkdir                     ; Entry 20: BASIC command |mkdir.
-        jp rsx_mv                        ; Entry 21: BASIC command |mv.
-        jp rsx_rm                        ; Entry 22: BASIC command |rm.
+        jp rsx_m4dir                     ; Entry 2: BASIC command |ls.
+        jp rsx_m4cd                      ; Entry 3: BASIC command |cd.
+        jp rsx_pwd                       ; Entry 4: BASIC command |pwd.
+        jp rsx_m4type                    ; Entry 5: BASIC command |type.
+        jp rsx_m4dump                    ; Entry 6: BASIC command |hexdump.
+        jp rsx_m4dump                    ; Entry 7: BASIC command |xxd.
+        jp rsx_m4info                    ; Entry 8: BASIC command |stat.
+        jp rsx_m4load                    ; Entry 9: BASIC command |loadm.
+        jp rsx_m4save                    ; Entry 10: BASIC command |savem.
+        jp rsx_m4loadh                   ; Entry 11: BASIC command |exec.
+        jp rsx_mkdir                     ; Entry 12: BASIC command |mkdir.
+        jp rsx_mv                        ; Entry 13: BASIC command |mv.
+        jp rsx_rm                        ; Entry 14: BASIC command |rm.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -107,27 +89,19 @@ rom_prefix:
 command_names:
         db "M4S BOO", &D4                ; Entry 0: rom_init ("T" + bit 7).
         db "HELL", &CF                   ; Entry 1: rsx_hello ("O" + bit 7).
-        db "M4DI", &D2                   ; Entry 2: rsx_m4dir ("R" + bit 7).
-        db "M4TYP", &C5                  ; Entry 3: rsx_m4type ("E" + bit 7).
-        db "M4DUM", &D0                  ; Entry 4: rsx_m4dump ("P" + bit 7).
-        db "M4LOA", &C4                  ; Entry 5: rsx_m4load ("D" + bit 7).
-        db "M4INF", &CF                  ; Entry 6: rsx_m4info ("O" + bit 7).
-        db "M4LOAD", &C8                 ; Entry 7: rsx_m4loadh ("H" + bit 7).
-        db "M4C", &C4                    ; Entry 8: rsx_m4cd ("D" + bit 7).
-        db "M4SAV", &C5                  ; Entry 9: rsx_m4save ("E" + bit 7).
-        db "L", &D3                      ; Entry 10: rsx_m4dir ("S" + bit 7).
-        db "C", &C4                      ; Entry 11: rsx_m4cd ("D" + bit 7).
-        db "PW", &C4                     ; Entry 12: rsx_pwd ("D" + bit 7).
-        db "CA", &D4                     ; Entry 13: rsx_m4type ("T" + bit 7).
-        db "HEXDUM", &D0                 ; Entry 14: rsx_m4dump ("P" + bit 7).
-        db "XX", &C4                     ; Entry 15: rsx_m4dump ("D" + bit 7).
-        db "STA", &D4                    ; Entry 16: rsx_m4info ("T" + bit 7).
-        db "LOAD", &CD                   ; Entry 17: rsx_m4load ("M" + bit 7).
-        db "SAVE", &CD                   ; Entry 18: rsx_m4save ("M" + bit 7).
-        db "EXE", &C3                    ; Entry 19: rsx_m4loadh ("C" + bit 7).
-        db "MKDI", &D2                   ; Entry 20: rsx_mkdir ("R" + bit 7).
-        db "M", &D6                      ; Entry 21: rsx_mv ("V" + bit 7).
-        db "R", &CD                      ; Entry 22: rsx_rm ("M" + bit 7).
+        db "L", &D3                      ; Entry 2: rsx_m4dir ("S" + bit 7).
+        db "C", &C4                      ; Entry 3: rsx_m4cd ("D" + bit 7).
+        db "PW", &C4                     ; Entry 4: rsx_pwd ("D" + bit 7).
+        db "TYP", &C5                    ; Entry 5: rsx_m4type ("E" + bit 7).
+        db "HEXDUM", &D0                 ; Entry 6: rsx_m4dump ("P" + bit 7).
+        db "XX", &C4                     ; Entry 7: rsx_m4dump ("D" + bit 7).
+        db "STA", &D4                    ; Entry 8: rsx_m4info ("T" + bit 7).
+        db "LOAD", &CD                   ; Entry 9: rsx_m4load ("M" + bit 7).
+        db "SAVE", &CD                   ; Entry 10: rsx_m4save ("M" + bit 7).
+        db "EXE", &C3                    ; Entry 11: rsx_m4loadh ("C" + bit 7).
+        db "MKDI", &D2                   ; Entry 12: rsx_mkdir ("R" + bit 7).
+        db "M", &D6                      ; Entry 13: rsx_mv ("V" + bit 7).
+        db "R", &CD                      ; Entry 14: rsx_rm ("M" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -170,7 +144,7 @@ rsx_hello:
         ret
 
 ; ---------------------------------------------------------------------------
-; |M4DIR RSX implementation.
+; |ls RSX implementation.
 ;
 ; Stage 2 proves the Z80-to-FPGA mailbox by issuing DIR_BEGIN and printing the
 ; returned zero-terminated byte stream.  The FPGA currently supplies hardcoded
@@ -257,7 +231,7 @@ rsx_m4dir_output:
         jr rsx_m4dir_loop
 
 ; ---------------------------------------------------------------------------
-; |M4CD and |M4CD,"dirname" RSX implementation.
+; |cd and |cd,"dirname" RSX implementation.
 ;
 ; With no parameter, resets Main_MiSTer's current shared-folder view to the
 ; shared root.  With one string parameter, enters a child directory under the
@@ -382,7 +356,7 @@ rsx_pwd_no_params:
         jr rsx_m4cd_send_command
 
 ; ---------------------------------------------------------------------------
-; |M4TYPE,"filename" RSX implementation.
+; |type,"filename" RSX implementation.
 ;
 ; This is a small Stage 4 proof of concept.  It sends a single filename string
 ; to the FPGA mailbox, asks Main_MiSTer to read it from the shared folder, and
@@ -457,10 +431,10 @@ rsx_m4type_output:
         jr rsx_m4type_loop
 
 ; ---------------------------------------------------------------------------
-; |M4DUMP,"filename" RSX implementation.
+; |hexdump,"filename" and |xxd,"filename" RSX implementation.
 ;
 ; The current mailbox stream is zero-terminated, so it cannot carry arbitrary
-; binary bytes directly.  M4DUMP asks Main_MiSTer to read the file and return an
+; binary bytes directly.  The command asks Main_MiSTer to read the file and return an
 ; ASCII hex dump, proving the host-side binary read path without changing the
 ; stream framing yet.
 ; ---------------------------------------------------------------------------
@@ -539,7 +513,7 @@ rsx_m4dump_output:
         jr rsx_m4dump_loop
 
 ; ---------------------------------------------------------------------------
-; |M4INFO,"filename" RSX implementation.
+; |stat,"filename" RSX implementation.
 ;
 ; Requests host-side metadata for a shared file.  Main_MiSTer currently reports
 ; file size and AMSDOS header fields if the first 128 bytes pass the AMSDOS
@@ -873,7 +847,7 @@ rsx_rm_output:
         jr rsx_rm_loop
 
 ; ---------------------------------------------------------------------------
-; |M4SAVE,"filename",&addr,&length RSX implementation.
+; |savem,"filename",&addr,&length RSX implementation.
 ;
 ; Stage 4 write proof.  This saves a CPC memory range to a file in the current
 ; shared folder.  The CPC sends 64-byte chunks encoded as ASCII hex so the
@@ -969,7 +943,7 @@ rsx_m4save_done:
         ret
 
 ; ---------------------------------------------------------------------------
-; |M4LOAD,"filename" RSX implementation.
+; |loadm,"filename" RSX implementation.
 ;
 ; Stage 4 proof of raw binary transfer.  This loads a file from the shared
 ; folder into CPC RAM at &4000 in 512-byte chunks.  Each chunk response starts
@@ -1081,11 +1055,11 @@ rsx_m4load_error:
         ret
 
 ; ---------------------------------------------------------------------------
-; |M4LOADH,"filename" RSX implementation.
+; |exec,"filename" RSX implementation.
 ;
 ; Reads AMSDOS metadata, prompts the user, loads the payload at the AMSDOS load
 ; address, and jumps to the AMSDOS entry address.  This is deliberately separate
-; from M4LOAD because it may write to low memory.
+; from loadm because it may write to low memory.
 ; ---------------------------------------------------------------------------
 rsx_m4loadh:
         cp 1
@@ -1494,7 +1468,7 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.11 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.12 installed", 13, 10, 13, 10, 0
 
 msg_ls_usage:
         db "Usage: |ls,", 34, "DIR", 34, 13, 10, 0
@@ -1506,7 +1480,7 @@ msg_pwd_usage:
         db "Usage: |pwd", 13, 10, 0
 
 msg_type_usage:
-        db "Usage: |cat,", 34, "FILE.TXT", 34, 13, 10, 0
+        db "Usage: |type,", 34, "FILE.TXT", 34, 13, 10, 0
 
 msg_dump_usage:
         db "Usage: |hexdump,", 34, "FILE.BIN", 34, 13, 10, 0

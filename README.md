@@ -9,14 +9,14 @@ expansion ROM that proves the CPC can see the ROM and dispatch an RSX command.
 Stage 2 adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory
 index through MiSTer's existing file download path. Stage 3B adds a custom
 Main_MiSTer hook that serves live `shared` folder listings on demand through
-`EXT_BUS`. Stage 4 starts a read-only path with `|cat,"FILE.TXT"` and
+`EXT_BUS`. Stage 4 starts a read-only path with `|type,"FILE.TXT"` and
 `|hexdump,"FILE.BIN"`, adds `|stat,"FILE.BIN"` for AMSDOS header diagnostics,
 then adds a first chunked binary load proof with `|loadm,"FILE.BIN"`. Stage
 4.5 adds `|cd` navigation within the shared folder. Stage 4.6 adds a first raw
 memory save proof with `|savem,"FILE.BIN",&4000,&0100`. Stage 4.7 adds the
 Unix-like command aliases. Stage 4.8 adds `|mkdir`, the first shared-folder
 management command. Stage 4.9 adds conservative `|mv` rename support. Stage 4.10 adds
-file-only `|rm` removal. Stage 4.11 adds optional path arguments for `|ls`.
+file-only `|rm` removal. Stage 4.11 adds optional path arguments for `|ls`. Stage 4.12 replaces `|cat` with `|type` and drops the old public `M4*` command names.
 
 ## Stage 1-4 status
 
@@ -26,7 +26,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.11 installed
+ M4S ROM Stage 4.12 installed
 
 ```
 
@@ -73,7 +73,7 @@ GAMES
 - A current-directory model for the helper, controlled by `|cd`.
 - An FPGA `EXT_BUS` bridge in `rtl/m4s_hps_ext.sv` that loads that live listing
   into the same directory index buffer used by `Load M4S index`.
-- A read-only `|cat,"FILE.TXT"` proof that sends a filename from the CPC to
+- A read-only `|type,"FILE.TXT"` proof that sends a filename from the CPC to
   Main_MiSTer and streams the file contents back through the mailbox.
 - A read-only `|hexdump,"FILE.BIN"` proof that asks Main_MiSTer to read a file
   and return an ASCII hex dump, avoiding zero-byte framing issues while testing
@@ -93,13 +93,12 @@ Not implemented yet:
 - General file open/read/write commands beyond the proof RSX helpers.
 - BASIC program save/load helpers.
 - Explicit copy commands between the shared folder and a mounted CPC disk.
-- File management helpers such as mkdir, rename, and delete.
+- Broader file management such as recursive directory removal, overwrite modes,
+  and wildcard operations.
 
 User-facing commands now use Unix-like RSX names where they do not collide with
-common CPC disk ROMs. The current `M4*` commands remain useful fallbacks while
-the short names settle.
-Avoid `|DIR`, `|ERA`, and `|REN` as primary names because AMSDOS already uses
-them. Preferred names are `|ls`, `|cd`, `|pwd`, `|cat`, `|stat`,
+common CPC disk ROMs. Avoid `|DIR`, `|ERA`, and `|REN` as primary names because
+AMSDOS already uses them. Preferred names are `|ls`, `|cd`, `|pwd`, `|type`, `|stat`,
 `|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|get`, `|put`,
 `|mkdir`, `|mv`, and `|rm`.
 
@@ -275,7 +274,7 @@ is capped to the same 2048-byte index buffer as Stage 3A.
 ## Stage 4 shared-folder navigation
 
 The helper maintains a current directory relative to the configured `shared`
-folder. The current directory affects `|ls`, `|cat`, `|hexdump`,
+folder. The current directory affects `|ls`, `|type`, `|hexdump`,
 `|stat`, `|loadm`, `|exec`, and `|savem`.
 
 Reset to the shared root:
@@ -311,11 +310,11 @@ root, run `|cd` with no arguments.
 ## Stage 4A text file streaming
 
 With the matching custom Main_MiSTer binary and Amstrad core installed,
-`|cat` reads a file from the resolved shared folder and prints it:
+`|type` reads a file from the resolved shared folder and prints it:
 
 ```basic
-|cat,"HELLO.TXT"
-|cat,"../NOTES.TXT"
+|type,"HELLO.TXT"
+|type,"../NOTES.TXT"
 ```
 
 The command accepts relative paths, rooted paths relative to the shared root,
@@ -454,7 +453,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.11 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.12 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 

@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.11 installed
+ M4S ROM Stage 4.12 installed
 
 ```
 
@@ -116,8 +116,8 @@ changing `CWD`, file commands resolve relative to that directory, and bare
 3. Start the Amstrad core and run:
 
 ```basic
-|cat,"HELLO.TXT"
-|cat,"../PARENT.TXT"
+|type,"HELLO.TXT"
+|type,"../PARENT.TXT"
 ```
 
 Expected:
@@ -287,6 +287,6 @@ Directories should be refused.
 - If `|ls` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If live listing does not update, confirm the custom Main_MiSTer binary is
   running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|cd`, `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, `|savem`, `|mkdir`, `|mv`, or `|rm` hangs, check the CPC-to-HPS request status path in
+- If `|cd`, `|type`, `|hexdump`, `|stat`, `|loadm`, `|exec`, `|savem`, `|mkdir`, `|mv`, or `|rm` hangs, check the CPC-to-HPS request status path in
   `m4s_mailbox` and `m4s_hps_ext`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.

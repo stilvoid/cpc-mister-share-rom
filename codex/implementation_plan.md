@@ -85,7 +85,7 @@ Acceptance:
 
 Status: implemented and manually tested.
 
-- `|cat,"FILE.TXT"` streams a small text file from the shared folder.
+- `|type,"FILE.TXT"` streams a small text file from the shared folder.
 - `|hexdump,"FILE.BIN"` dumps a binary file as ASCII hex.
 - `|stat,"FILE.BIN"` reports file size and AMSDOS header metadata.
 - `|loadm,"FILE.BIN"` and `|loadm,"FILE.BIN",&8000` load raw binary chunks
@@ -120,36 +120,36 @@ Implement:
   overwrite unless the RSX explicitly asks for it.
 - Shared file commands should accept normalized relative paths such as
   `../file.bin` and `subdir/file.bin` while refusing traversal above the shared
-  root. Implemented for `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, and
+  root. Implemented for `|type`, `|hexdump`, `|stat`, `|loadm`, `|exec`, and
   `|savem`.
 
 Acceptance:
 
-- `|loadm`, `|exec`, `|savem`, `|cat`, `|hexdump`, and `|stat` still
+- `|loadm`, `|exec`, `|savem`, `|type`, `|hexdump`, and `|stat` still
   pass their manual tests after moving to the common transport.
 - Error messages are deterministic enough to debug from the CPC screen.
 
 ## Stage 6: User-facing RSX command names
 
-Status: implemented in Stage 4.7 and pending manual MiSTer testing.
+Status: implemented.
 
-Goal: move from proof-oriented `M4*` command names to a small, memorable
-Unix-like command set for the shared folder system.
+Goal: use a small, memorable Unix-like command set for the shared folder
+system.
 
 Known collision constraints:
 
 - Avoid `|DIR`, `|ERA`, and `|REN` as primary names because AMSDOS owns those
   RSXs on disk systems.
 - Avoid one-letter drive-like names such as `|A` and `|B`.
-- Treat all short generic names as best-effort. Other expansion ROMs can define
-  their own RSXs, so keep a namespaced fallback while the interface settles.
+- Treat all short generic names as best-effort. Other expansion ROMs can still
+  define their own RSXs, so future collisions may require another rename.
 
 Preferred primary names:
 
 - `|ls` lists the current shared folder.
 - `|cd,"path"` changes the current shared folder directory.
 - `|pwd` prints the current shared folder directory.
-- `|cat,"file"` prints a text file.
+- `|type,"file"` prints a text file.
 - `|hexdump,"file"` or `|xxd,"file"` dumps binary data as hex.
 - `|stat,"file"` shows file size and AMSDOS header metadata.
 - `|loadm,"file",&4000` loads a raw shared file into CPC memory.
@@ -175,20 +175,12 @@ Copy command convention:
   - `|get,"hello.bas","hello.bas"` copies disk to shared.
   - `|put,"games/dizzy.bin","dizzy.bin"` copies a nested shared file to disk.
 
-Transition plan:
-
-- Keep the existing `M4*` commands as fallbacks while the aliases settle.
-- Once aliases are stable, update documentation and manual tests to prefer the
-  Unix-like names.
-- Only remove `M4*` aliases if ROM space becomes tight and after the short names
-  have been tested with common ROM slot configurations.
-
 Acceptance:
 
-- The command table registers the preferred aliases without breaking the
-  existing tested `M4*` commands.
-- `|ls`, `|cd`, `|cat`, `|stat`, `|loadm`, `|savem`, and `|exec` pass the same
-  manual tests as their current `M4*` equivalents.
+- The command table registers the preferred names without the old `M4*` public
+  fallbacks.
+- `|ls`, `|cd`, `|type`, `|stat`, `|loadm`, `|savem`, and `|exec` pass the same
+  manual tests as the previous proof commands.
 - A short note documents known AMSDOS-owned command names to avoid.
 
 ## Stage 7: BASIC program save/load helpers
