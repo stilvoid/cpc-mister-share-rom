@@ -273,7 +273,9 @@ Implement after copy/save/load are stable:
 
 - `|mkdir,"DIR"` to create directories. Implemented in Stage 4.8 for a single
   child directory in the current shared folder.
-- `|mv,"OLD","NEW"` to rename a file or directory.
+- `|mv,"OLD","NEW"` to rename a file or directory. Implemented in Stage 4.9
+  for a single file or directory in the current shared folder, refusing
+  overwrites.
 - `|rm,"FILE"` to delete a file, with conservative confirmation or explicit
   force syntax.
 - `|pwd` if `|ls` output becomes too dense.
