@@ -22,6 +22,7 @@
 ;     |rm,"FILE"
 ;     |diskread,"DISCFILE","shared/path"
 ;     |diskread,"DISCFILE","shared/path",0
+;     |diskwrite,"shared/path","DISCFILE"
 ;
 ; Running |HELLO prints:
 ;
@@ -39,6 +40,9 @@ CAS_IN_OPEN     equ &BC77                ; Firmware: open AMSDOS input file.
 CAS_IN_CLOSE    equ &BC7A                ; Firmware: close AMSDOS input file.
 CAS_IN_CHAR     equ &BC80                ; Firmware: read byte from AMSDOS input.
 CAS_IN_DIRECT   equ &BC83                ; Firmware: read file directly to RAM.
+CAS_OUT_OPEN    equ &BC8C                ; Firmware: open AMSDOS output file.
+CAS_OUT_CLOSE   equ &BC8F                ; Firmware: close AMSDOS output file.
+CAS_OUT_CHAR    equ &BC95                ; Firmware: write byte to AMSDOS output.
 CHAR_CR         equ 13
 CHAR_LF         equ 10
 CHAR_EOF        equ 26
@@ -54,6 +58,8 @@ M4S_IMPORT_DONE equ &9808                ; 16-bit diskread payload bytes sent.
 M4S_IMPORT_SRC_DESC equ &980A            ; 16-bit diskread source descriptor.
 M4S_IMPORT_DST_DESC equ &980C            ; 16-bit diskread destination descriptor.
 M4S_IMPORT_HEADER_MODE equ &980E         ; Non-zero means prepend AMSDOS header.
+M4S_DISKWRITE_BYTE equ &9810             ; Byte currently being written to disk.
+M4S_DISKWRITE_STATUS equ &9811           ; Non-zero means CAS_OUT_CHAR failed.
 
         org KL_ROM_BASE
 
@@ -94,6 +100,7 @@ rom_prefix:
         jp rsx_cp                        ; Entry 13: BASIC command |cp.
         jp rsx_rm                        ; Entry 14: BASIC command |rm.
         jp rsx_diskread                  ; Entry 15: BASIC command |diskread.
+        jp rsx_diskwrite                 ; Entry 16: BASIC command |diskwrite.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -122,6 +129,7 @@ command_names:
         db "C", &D0                      ; Entry 13: rsx_cp ("P" + bit 7).
         db "R", &CD                      ; Entry 14: rsx_rm ("M" + bit 7).
         db "DISKREA", &C4                ; Entry 15: rsx_diskread ("D" + bit 7).
+        db "DISKWRIT", &C5               ; Entry 16: rsx_diskwrite ("E" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -1294,6 +1302,136 @@ rsx_import_error:
         call print_string
         ret
 
+; ---------------------------------------------------------------------------
+; |diskwrite,"shared/path","discfile" RSX implementation.
+;
+; Streams a shared-folder file to the currently selected AMSDOS disk.  This first
+; pass writes raw bytes through CAS_OUT_CHAR; AMSDOS header handling can be added
+; once the byte stream path is proven on real hardware.
+; ---------------------------------------------------------------------------
+rsx_diskwrite:
+        cp 2
+        jr z, rsx_diskwrite_have_params
+        ld hl, msg_diskwrite_usage
+        call print_string
+        ret
+
+rsx_diskwrite_have_params:
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = shared source descriptor.
+        ld a, (hl)
+        or a
+        jr nz, rsx_diskwrite_source_nonempty
+        ld hl, msg_diskwrite_usage
+        call print_string
+        ret
+
+rsx_diskwrite_source_nonempty:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = disk destination descriptor.
+        ld a, (hl)
+        or a
+        jr nz, rsx_diskwrite_nonempty
+        ld hl, msg_diskwrite_usage
+        call print_string
+        ret
+
+rsx_diskwrite_nonempty:
+        ld b, (hl)                       ; B = disk filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        ex de, hl                        ; HL = disk filename data.
+        ld de, M4S_DISC_BUFFER
+        push ix
+        call CAS_OUT_OPEN
+        pop ix
+        jp nc, rsx_diskwrite_error
+
+        ld de, 0                         ; DE = shared source file offset.
+
+rsx_diskwrite_chunk:
+        ld iy, 1                         ; m4load_send_request uses IX+2.
+        call m4load_send_request
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        call m4load_read_byte
+        jr nc, rsx_diskwrite_close_error
+        ld c, a
+        call m4load_read_byte
+        jr nc, rsx_diskwrite_close_error
+        ld b, a                          ; BC = returned byte count.
+
+        ld a, b
+        cp 3
+        jr nc, rsx_diskwrite_close_error ; Refuse counts above 512 bytes.
+        cp 2
+        jr nz, rsx_diskwrite_count_valid
+        ld a, c
+        or a
+        jr nz, rsx_diskwrite_close_error
+
+rsx_diskwrite_count_valid:
+        ld a, b
+        or c
+        jr z, rsx_diskwrite_close_done
+
+rsx_diskwrite_byte_loop:
+        call m4load_read_byte
+        jr nc, rsx_diskwrite_close_error
+        ld (M4S_DISKWRITE_BYTE), a
+
+        push bc
+        push de
+        push ix
+        ld a, (M4S_DISKWRITE_BYTE)
+        call CAS_OUT_CHAR
+        ld a, 0
+        jr c, rsx_diskwrite_char_ok
+        inc a
+
+rsx_diskwrite_char_ok:
+        ld (M4S_DISKWRITE_STATUS), a
+        pop ix
+        pop de
+        pop bc
+        ld a, (M4S_DISKWRITE_STATUS)
+        or a
+        jr nz, rsx_diskwrite_close_error
+
+        inc de
+        dec bc
+        ld a, b
+        or c
+        jr nz, rsx_diskwrite_byte_loop
+
+        ld a, d                          ; Stop if the 16-bit transfer offset
+        or e                             ; wraps around at 64KB.
+        jr z, rsx_diskwrite_close_done
+        jr rsx_diskwrite_chunk
+
+rsx_diskwrite_close_done:
+        push ix
+        call CAS_OUT_CLOSE
+        pop ix
+        ld hl, msg_diskwrite_done
+        call print_string
+        ret
+
+rsx_diskwrite_close_error:
+        push ix
+        call CAS_OUT_CLOSE
+        pop ix
+
+rsx_diskwrite_error:
+        ld hl, msg_diskwrite_error
+        call print_string
+        ret
+
 import_create_destination:
         ld a, M4S_CMD_REQ_BEGIN
         ld bc, M4S_PORT_COMMAND
@@ -2201,6 +2339,15 @@ msg_import_done:
 
 msg_import_error:
         db "Disk read failed", 13, 10, 0
+
+msg_diskwrite_usage:
+        db "Usage: |diskwrite,", 34, "SHARED", 34, ",", 34, "DISC", 34, 13, 10, 0
+
+msg_diskwrite_done:
+        db "Disk write OK", 13, 10, 0
+
+msg_diskwrite_error:
+        db "Disk write failed", 13, 10, 0
 
 msg_load_usage:
         db "Usage: |loadm,", 34, "FILE.BIN", 34, ",&8000", 13, 10, 0
