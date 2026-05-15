@@ -42,10 +42,12 @@ CHAR_CR         equ 13
 CHAR_LF         equ 10
 M4S_LOAD_ADDR   equ &4000
 M4S_DISC_BUFFER equ &6000                ; 2KB AMSDOS input buffer.
+M4S_IMPORT_HEADER equ &9000              ; 128-byte saved AMSDOS header.
 M4S_IMPORT_REMAIN equ &7F00              ; 16-bit remaining diskread bytes.
 M4S_IMPORT_CTRL equ &7F02                ; 16-bit AMSDOS buffer control ptr.
 M4S_IMPORT_BLOCK equ &7F04               ; 16-bit bytes left in AMSDOS buffer.
 M4S_IMPORT_CHUNK equ &7F06               ; 8-bit current shared write length.
+M4S_IMPORT_REQ_TYPE equ &7F07            ; "S" create/truncate or "W" patch.
 
         org KL_ROM_BASE
 
@@ -1002,6 +1004,9 @@ rsx_import_nonempty:
         ld b, (hl)                        ; BC = file payload length.
         ld (M4S_IMPORT_REMAIN), bc
         pop hl                            ; HL = AMSDOS header pointer.
+        push hl
+        call import_save_header
+        pop hl
         ld de, -4
         add hl, de
         ld (M4S_IMPORT_CTRL), hl          ; Hidden AMSDOS buffer control.
@@ -1009,7 +1014,13 @@ rsx_import_nonempty:
         call import_create_destination
         jp nc, rsx_import_close_error
 
-        ld de, 0                         ; DE = shared destination file offset.
+        ld de, 0                          ; DE = shared destination file offset.
+        push de
+        push ix
+        call CAS_IN_CHAR                  ; Prime AMSDOS' first 2KB buffer.
+        pop ix
+        pop de
+        jp nc, rsx_import_close_error
         jr rsx_import_copy_buffer
 
 rsx_import_refill:
@@ -1079,8 +1090,37 @@ rsx_import_close_done:
         push ix
         call CAS_IN_CLOSE
         pop ix
+        call import_prepend_saved_header
+        jp nc, rsx_import_error
         ld hl, msg_import_done
         call print_string
+        ret
+
+import_save_header:
+        push de
+        push bc
+        ld de, M4S_IMPORT_HEADER
+        ld bc, 128
+        ldir
+        pop bc
+        pop de
+        ret
+
+import_prepend_saved_header:
+        push hl
+        push de
+        ld hl, M4S_IMPORT_HEADER
+        call import_prepend_header_request
+        jr nc, import_prepend_saved_header_failed
+        pop de
+        pop hl
+        scf
+        ret
+
+import_prepend_saved_header_failed:
+        pop de
+        pop hl
+        or a
         ret
 
 import_decrease_remaining:
@@ -1191,9 +1231,9 @@ import_create_destination:
         out (c), a
 
         call m4load_read_byte
-        jr nc, import_response_failed
+        jp nc, import_response_failed
         cp "O"
-        jr nz, import_response_failed
+        jp nz, import_response_failed
         scf
         ret
 
@@ -1201,9 +1241,96 @@ import_response_failed:
         or a
         ret
 
+; Send the saved AMSDOS header to the host in two 64-byte halves.  Main_MiSTer
+; prepends the complete header after the second half arrives, so the proven
+; payload streaming path can remain unchanged.
+import_prepend_header_request:
+        push hl
+        ld a, "0"
+        call import_prepend_header_half
+        jr nc, import_prepend_header_failed
+        pop hl
+        ld de, 64
+        add hl, de
+        ld a, "1"
+        jp import_prepend_header_half
+
+import_prepend_header_failed:
+        pop hl
+        or a
+        ret
+
+; Send request "Y:N:filename:HEX", where N is "0" or "1" and HL points at 64
+; bytes of header data.
+import_prepend_header_half:
+        push hl
+        push af
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "Y"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        pop af
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = shared destination descriptor.
+        call mv_send_descriptor
+
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop hl
+        ld e, 64
+
+import_prepend_header_data:
+        ld a, (hl)
+        call m4load_send_hex_byte
+        inc hl
+        dec e
+        jr nz, import_prepend_header_data
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        call m4load_read_byte
+        jp nc, import_response_failed
+        cp "O"
+        jp nz, import_response_failed
+        scf
+        ret
+
 ; Send request "S:OOOO:NN:filename:HEX", where OOOO is the file offset in DE,
 ; NN is the chunk length in A, and HL points at the chunk data.
 import_send_chunk_request:
+        push af
+        ld a, "S"
+        ld (M4S_IMPORT_REQ_TYPE), a
+        pop af
+        jr import_send_typed_chunk_request
+
+; Same as import_send_chunk_request, but request type "W" patches an existing
+; shared file without truncating when the offset is zero.
+import_patch_chunk_request:
+        push af
+        ld a, "W"
+        ld (M4S_IMPORT_REQ_TYPE), a
+        pop af
+
+import_send_typed_chunk_request:
         push hl
         push de
         push bc
@@ -1214,7 +1341,7 @@ import_send_chunk_request:
         out (c), a
 
         ld bc, M4S_PORT_DATA
-        ld a, "S"
+        ld a, (M4S_IMPORT_REQ_TYPE)
         out (c), a
         ld a, ":"
         out (c), a
@@ -1272,9 +1399,9 @@ import_send_chunk_data:
         out (c), a
 
         call m4load_read_byte
-        jr nc, import_response_failed
+        jp nc, import_response_failed
         cp "O"
-        jr nz, import_response_failed
+        jp nz, import_response_failed
         scf
         ret
 

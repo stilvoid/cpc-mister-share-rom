@@ -471,11 +471,11 @@ shared folder:
 
 The first argument is the CPC disk filename. The second argument is the shared
 folder destination path, resolved using the same relative path rules as `|cp`
-and `|savem`. The host refuses existing destinations. The first implementation
-streams from AMSDOS' 2KB buffer at `&6000`, writes the payload to the shared
-folder in 64-byte chunks, and keeps the same 16-bit offset limit as the other
-proof write paths. It currently copies the payload only, not the 128-byte
-AMSDOS header.
+and `|savem`. The host refuses existing destinations. The current implementation
+uses the proven streaming path from AMSDOS' 2KB buffer to the shared folder in
+64-byte chunks, then closes the AMSDOS file and asks Main_MiSTer to prepend the
+saved 128-byte AMSDOS header. The shared output is therefore an AMSDOS-headered
+file by default while keeping the streaming behaviour needed for larger files.
 
 ## Testing `|HELLO` in BASIC
 
