@@ -160,7 +160,8 @@ Preferred primary names:
 - `|loadb,"file.bas"` loads a BASIC program from shared.
 - `|get,"discfile","sharedfile"` copies from the mounted CPC disk to shared.
 - `|put,"sharedfile","discfile"` copies from shared to the mounted CPC disk.
-- `|mkdir,"dir"`, `|mv,"old","new"`, and `|rm,"file"` provide file management.
+- `|mkdir,"dir"`, `|mv,"old","new"`, `|cp,"src","dst"`, and `|rm,"file"`
+  provide file management.
 
 Copy command convention:
 
@@ -274,6 +275,8 @@ Implement after copy/save/load are stable:
 - `|mv,"OLD","NEW"` to rename a file or directory. Implemented in Stage 4.9
   for a single file or directory in the current shared folder, refusing
   overwrites.
+- `|cp,"SRC","DST"` to copy a file within the shared folder. Implemented in
+  Stage 4.13, refusing directories and existing destinations.
 - `|rm,"FILE"` to delete a file. Implemented in Stage 4.10 for one file in the
   current shared folder, refusing directories and paths.
 - `|pwd` if `|ls` output becomes too dense.

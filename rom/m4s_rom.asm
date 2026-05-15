@@ -18,6 +18,7 @@
 ;     |exec,"FILE.BIN"
 ;     |mkdir,"DIR"
 ;     |mv,"OLD","NEW"
+;     |cp,"SRC","DST"
 ;     |rm,"FILE"
 ;
 ; Running |HELLO prints:
@@ -72,7 +73,8 @@ rom_prefix:
         jp rsx_m4loadh                   ; Entry 10: BASIC command |exec.
         jp rsx_mkdir                     ; Entry 11: BASIC command |mkdir.
         jp rsx_mv                        ; Entry 12: BASIC command |mv.
-        jp rsx_rm                        ; Entry 13: BASIC command |rm.
+        jp rsx_cp                        ; Entry 13: BASIC command |cp.
+        jp rsx_rm                        ; Entry 14: BASIC command |rm.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -98,7 +100,8 @@ command_names:
         db "EXE", &C3                    ; Entry 10: rsx_m4loadh ("C" + bit 7).
         db "MKDI", &D2                   ; Entry 11: rsx_mkdir ("R" + bit 7).
         db "M", &D6                      ; Entry 12: rsx_mv ("V" + bit 7).
-        db "R", &CD                      ; Entry 13: rsx_rm ("M" + bit 7).
+        db "C", &D0                      ; Entry 13: rsx_cp ("P" + bit 7).
+        db "R", &CD                      ; Entry 14: rsx_rm ("M" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -773,6 +776,93 @@ mv_send_name:
         inc de
         djnz mv_send_name
         ret
+
+; ---------------------------------------------------------------------------
+; |cp,"src","dst" RSX implementation.
+;
+; Copies one file within the shared folder.  Main_MiSTer resolves relative
+; source and destination paths and refuses to overwrite an existing destination.
+; ---------------------------------------------------------------------------
+rsx_cp:
+        cp 2
+        jr z, rsx_cp_have_params
+        ld hl, msg_cp_usage
+        call print_string
+        ret
+
+rsx_cp_have_params:
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = source string descriptor.
+        ld a, (hl)
+        or a
+        jr nz, rsx_cp_source_nonempty
+        ld hl, msg_cp_usage
+        call print_string
+        ret
+
+rsx_cp_source_nonempty:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = destination string descriptor.
+        ld a, (hl)
+        or a
+        jr nz, rsx_cp_nonempty
+        ld hl, msg_cp_usage
+        call print_string
+        ret
+
+rsx_cp_nonempty:
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "P"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = source string descriptor.
+        call mv_send_descriptor
+
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = destination string descriptor.
+        call mv_send_descriptor
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        xor a
+        ld e, a
+
+rsx_cp_loop:
+        call mailbox_read_byte
+        ret nc
+        or a
+        ret z
+        cp CHAR_LF
+        jr nz, rsx_cp_output
+        ld a, e
+        cp CHAR_CR
+        ld a, CHAR_LF
+        jr z, rsx_cp_output
+        push af
+        ld a, CHAR_CR
+        call TXT_OUTPUT
+        pop af
+rsx_cp_output:
+        call TXT_OUTPUT
+        ld e, a
+        jr rsx_cp_loop
 
 ; ---------------------------------------------------------------------------
 ; |rm,"file" RSX implementation.
@@ -1465,7 +1555,7 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.12 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.13 installed", 13, 10, 13, 10, 0
 
 msg_ls_usage:
         db "Usage: |ls,", 34, "DIR", 34, 13, 10, 0
@@ -1490,6 +1580,9 @@ msg_mkdir_usage:
 
 msg_mv_usage:
         db "Usage: |mv,", 34, "OLD", 34, ",", 34, "NEW", 34, 13, 10, 0
+
+msg_cp_usage:
+        db "Usage: |cp,", 34, "SRC", 34, ",", 34, "DST", 34, 13, 10, 0
 
 msg_rm_usage:
         db "Usage: |rm,", 34, "FILE", 34, 13, 10, 0

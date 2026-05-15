@@ -16,7 +16,7 @@ then adds a first chunked binary load proof with `|loadm,"FILE.BIN"`. Stage
 memory save proof with `|savem,"FILE.BIN",&4000,&0100`. Stage 4.7 adds the
 Unix-like command aliases. Stage 4.8 adds `|mkdir`, the first shared-folder
 management command. Stage 4.9 adds conservative `|mv` rename support. Stage 4.10 adds
-file-only `|rm` removal. Stage 4.11 adds optional path arguments for `|ls`. Stage 4.12 replaces `|cat` with `|type` and drops the old public `M4*` command names.
+file-only `|rm` removal. Stage 4.11 adds optional path arguments for `|ls`. Stage 4.12 replaces `|cat` with `|type` and drops the old public `M4*` command names. Stage 4.13 adds shared-to-shared `|cp`.
 
 ## Stage 1-4 status
 
@@ -26,7 +26,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.12 installed
+ M4S ROM Stage 4.13 installed
 
 ```
 
@@ -100,7 +100,7 @@ User-facing commands now use Unix-like RSX names where they do not collide with
 common CPC disk ROMs. Avoid `|DIR`, `|ERA`, and `|REN` as primary names because
 AMSDOS already uses them. Preferred names are `|ls`, `|cd`, `|pwd`, `|type`, `|stat`,
 `|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|get`, `|put`,
-`|mkdir`, `|mv`, and `|rm`.
+`|mkdir`, `|mv`, `|cp`, and `|rm`.
 
 ## How CPC expansion ROMs work
 
@@ -431,7 +431,19 @@ The command currently accepts a single directory name only. Path separators and
 The command refuses path separators, `..`, and existing destinations. It does
 not overwrite files.
 
-## Stage 4I remove files
+## Stage 4I copy files
+
+`|cp` copies one file within the shared folder:
+
+```basic
+|cp,"a.txt","b/a.txt"
+```
+
+Source and destination paths use the same shared-folder relative path rules as
+`|type`, `|loadm`, and `|savem`. The command refuses directories and existing
+destinations.
+
+## Stage 4J remove files
 
 `|rm` removes one file in the current shared folder:
 
@@ -453,7 +465,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.12 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.13 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 
