@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.9 installed
+ M4S ROM Stage 4.10 installed
 
 ```
 
@@ -254,6 +254,22 @@ Expected:
 `|mv,"OLD.BIN","NEW.BIN"` prints `Renamed: OLD.BIN -> NEW.BIN`, `|ls` shows
 `NEW.BIN`, and the command refuses to overwrite an existing destination.
 
+## Stage 4I: Remove a shared folder file
+
+1. Install the matching custom Main_MiSTer binary and ROM.
+2. Create `DELETE.ME` in the current shared folder.
+3. Start the Amstrad core and run:
+
+```basic
+|rm,"DELETE.ME"
+|ls
+```
+
+Expected:
+
+`|rm,"DELETE.ME"` prints `Removed: DELETE.ME`, and `|ls` no longer shows it.
+Directories should be refused.
+
 ## Debug hints
 
 - If `|HELLO` is unknown, debug ROM header/RSX registration first.
@@ -262,6 +278,6 @@ Expected:
 - If `|ls` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If live listing does not update, confirm the custom Main_MiSTer binary is
   running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|cd`, `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, `|savem`, `|mkdir`, or `|mv` hangs, check the CPC-to-HPS request status path in
+- If `|cd`, `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, `|savem`, `|mkdir`, `|mv`, or `|rm` hangs, check the CPC-to-HPS request status path in
   `m4s_mailbox` and `m4s_hps_ext`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.

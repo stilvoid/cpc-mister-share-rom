@@ -276,8 +276,8 @@ Implement after copy/save/load are stable:
 - `|mv,"OLD","NEW"` to rename a file or directory. Implemented in Stage 4.9
   for a single file or directory in the current shared folder, refusing
   overwrites.
-- `|rm,"FILE"` to delete a file, with conservative confirmation or explicit
-  force syntax.
+- `|rm,"FILE"` to delete a file. Implemented in Stage 4.10 for one file in the
+  current shared folder, refusing directories and paths.
 - `|pwd` if `|ls` output becomes too dense.
 - Directory listing improvements: sizes, file type hints, and long-name display
   that remains readable on a CPC screen.

@@ -28,6 +28,7 @@
 ;     |exec,"FILE.BIN"
 ;     |mkdir,"DIR"
 ;     |mv,"OLD","NEW"
+;     |rm,"FILE"
 ;
 ; Running |HELLO prints:
 ;
@@ -90,6 +91,7 @@ rom_prefix:
         jp rsx_m4loadh                   ; Entry 19: BASIC command |exec.
         jp rsx_mkdir                     ; Entry 20: BASIC command |mkdir.
         jp rsx_mv                        ; Entry 21: BASIC command |mv.
+        jp rsx_rm                        ; Entry 22: BASIC command |rm.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -124,6 +126,7 @@ command_names:
         db "EXE", &C3                    ; Entry 19: rsx_m4loadh ("C" + bit 7).
         db "MKDI", &D2                   ; Entry 20: rsx_mkdir ("R" + bit 7).
         db "M", &D6                      ; Entry 21: rsx_mv ("V" + bit 7).
+        db "R", &CD                      ; Entry 22: rsx_rm ("M" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -747,6 +750,75 @@ mv_send_name:
         ret
 
 ; ---------------------------------------------------------------------------
+; |rm,"file" RSX implementation.
+;
+; Removes one file in the current shared folder.  Main_MiSTer refuses
+; directories, paths, and traversal.
+; ---------------------------------------------------------------------------
+rsx_rm:
+        cp 1
+        jr z, rsx_rm_have_param
+        ld hl, msg_rm_usage
+        call print_string
+        ret
+
+rsx_rm_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)
+        or a
+        jr nz, rsx_rm_nonempty
+        ld hl, msg_rm_usage
+        call print_string
+        ret
+
+rsx_rm_nonempty:
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "R"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)
+        call mv_send_descriptor
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        xor a
+        ld e, a
+
+rsx_rm_loop:
+        call mailbox_read_byte
+        ret nc
+        or a
+        ret z
+        cp CHAR_LF
+        jr nz, rsx_rm_output
+        ld a, e
+        cp CHAR_CR
+        ld a, CHAR_LF
+        jr z, rsx_rm_output
+        push af
+        ld a, CHAR_CR
+        call TXT_OUTPUT
+        pop af
+rsx_rm_output:
+        call TXT_OUTPUT
+        ld e, a
+        jr rsx_rm_loop
+
+; ---------------------------------------------------------------------------
 ; |M4SAVE,"filename",&addr,&length RSX implementation.
 ;
 ; Stage 4 write proof.  This saves a CPC memory range to a file in the current
@@ -1368,7 +1440,7 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.9 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.10 installed", 13, 10, 13, 10, 0
 
 msg_cd_usage:
         db "Usage: |cd,", 34, "DIR", 34, 13, 10, 0
@@ -1390,6 +1462,9 @@ msg_mkdir_usage:
 
 msg_mv_usage:
         db "Usage: |mv,", 34, "OLD", 34, ",", 34, "NEW", 34, 13, 10, 0
+
+msg_rm_usage:
+        db "Usage: |rm,", 34, "FILE", 34, 13, 10, 0
 
 msg_load_usage:
         db "Usage: |loadm,", 34, "FILE.BIN", 34, ",&8000", 13, 10, 0
