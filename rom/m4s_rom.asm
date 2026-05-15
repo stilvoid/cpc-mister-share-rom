@@ -41,10 +41,11 @@ CAS_IN_DIRECT   equ &BC83                ; Firmware: read file directly to RAM.
 CHAR_CR         equ 13
 CHAR_LF         equ 10
 M4S_LOAD_ADDR   equ &4000
-M4S_DISC_BUFFER equ &B800                ; 2KB AMSDOS input buffer.
-M4S_IMPORT_BUFFER equ &7800              ; 64-byte disk-to-shared chunk buffer.
-M4S_IMPORT_LOAD equ &2000                ; Scratch load address for diskread.
-M4S_IMPORT_MAX  equ M4S_DISC_BUFFER - M4S_IMPORT_LOAD
+M4S_DISC_BUFFER equ &6000                ; 2KB AMSDOS input buffer.
+M4S_IMPORT_REMAIN equ &7F00              ; 16-bit remaining diskread bytes.
+M4S_IMPORT_CTRL equ &7F02                ; 16-bit AMSDOS buffer control ptr.
+M4S_IMPORT_BLOCK equ &7F04               ; 16-bit bytes left in AMSDOS buffer.
+M4S_IMPORT_CHUNK equ &7F06               ; 8-bit current shared write length.
 
         org KL_ROM_BASE
 
@@ -993,52 +994,86 @@ rsx_import_nonempty:
         pop ix
         jp nc, rsx_import_error
 
+        push hl                           ; Preserve AMSDOS header pointer.
         ld de, 24                         ; AMSDOS logical length field.
         add hl, de
         ld c, (hl)
         inc hl
         ld b, (hl)                        ; BC = file payload length.
-        ld a, b
-        cp M4S_IMPORT_MAX / 256
-        jr c, rsx_import_length_ok
-        jp nz, rsx_import_close_error
-        ld a, c
-        or a
-        jp nz, rsx_import_close_error
+        ld (M4S_IMPORT_REMAIN), bc
+        pop hl                            ; HL = AMSDOS header pointer.
+        ld de, -4
+        add hl, de
+        ld (M4S_IMPORT_CTRL), hl          ; Hidden AMSDOS buffer control.
 
-rsx_import_length_ok:
-        push bc                           ; Preserve length in IY across the
-        pop iy                            ; direct load and write loop.
-        ld hl, M4S_IMPORT_LOAD            ; Load into scratch RAM, not the
-                                          ; file header's execution address.
-        push ix
-        call CAS_IN_DIRECT
-        pop ix
-        jr nc, rsx_import_direct_error
-        ld hl, M4S_IMPORT_LOAD            ; HL = loaded payload source.
+        call import_create_destination
+        jp nc, rsx_import_close_error
+
         ld de, 0                         ; DE = shared destination file offset.
+        jr rsx_import_copy_buffer
 
-rsx_import_memory_chunk:
-        push iy
-        pop bc                            ; BC = bytes left to write.
+rsx_import_refill:
+        ld bc, (M4S_IMPORT_REMAIN)
         ld a, b
         or c
         jr z, rsx_import_close_done
 
+        push de
+        push ix
+        call CAS_IN_CHAR                  ; Fill/refill the 2KB AMSDOS buffer.
+        pop ix
+        pop de
+        jp nc, rsx_import_close_error
+
+rsx_import_copy_buffer:
+        ld bc, (M4S_IMPORT_REMAIN)
+        ld a, b
+        cp 8
+        jr c, rsx_import_short_block
+        ld bc, 2048
+        jr rsx_import_block_ready
+
+rsx_import_short_block:
+        ld bc, (M4S_IMPORT_REMAIN)
+
+rsx_import_block_ready:
+        ld (M4S_IMPORT_BLOCK), bc
+        call import_load_buffer_base
+
+rsx_import_block_loop:
+        ld bc, (M4S_IMPORT_BLOCK)
+        ld a, b
+        or c
+        jr z, rsx_import_block_done
         ld a, b
         or a
-        jr nz, rsx_import_memory_chunk_64
+        jr nz, rsx_import_chunk_64
         ld a, c
         cp 65
-        jr c, rsx_import_memory_chunk_ready
+        jr c, rsx_import_chunk_ready
 
-rsx_import_memory_chunk_64:
+rsx_import_chunk_64:
         ld a, 64
 
-rsx_import_memory_chunk_ready:
-        call import_send_memory_chunk
-        jr nc, rsx_import_close_error
-        jr rsx_import_memory_chunk
+rsx_import_chunk_ready:
+        ld (M4S_IMPORT_CHUNK), a
+        call import_send_chunk_request
+        jp nc, rsx_import_close_error
+        ld a, (M4S_IMPORT_CHUNK)
+        call import_decrease_remaining
+        ld a, (M4S_IMPORT_CHUNK)
+        call import_decrease_block
+
+rsx_import_advance_chunk:
+        inc hl
+        inc de
+        dec a
+        jr nz, rsx_import_advance_chunk
+        jr rsx_import_block_loop
+
+rsx_import_block_done:
+        call import_mark_buffer_consumed
+        jr rsx_import_refill
 
 rsx_import_close_done:
         push ix
@@ -1048,53 +1083,78 @@ rsx_import_close_done:
         call print_string
         ret
 
-rsx_import_direct_error:
-        jr rsx_import_close_error
-
-import_send_memory_chunk:
-        push af
-        ld a, d
-        or e
-        jr nz, import_send_memory_chunk_now
-
+import_decrease_remaining:
         push hl
         push de
-        call import_create_destination
-        jr nc, import_create_destination_failed
+        push bc
+        push af
+        ld e, a
+        ld d, 0
+        ld hl, (M4S_IMPORT_REMAIN)
+        or a
+        sbc hl, de
+        ld (M4S_IMPORT_REMAIN), hl
+        pop af
+        pop bc
         pop de
         pop hl
-
-import_send_memory_chunk_now:
-        pop af
-        push af
-        call import_send_chunk_request
-        jr nc, import_send_memory_failed
-
-        pop af
-
-import_advance_pointers:
-        inc hl
-        inc de
-        dec iy
-        dec a
-        jr nz, import_advance_pointers
-        ld a, d
-        or e
-        jr z, import_chunk_failed        ; Stop at the 64KB proof limit.
-        scf
         ret
 
-import_create_destination_failed:
+import_decrease_block:
+        push hl
+        push de
+        push bc
+        push af
+        ld e, a
+        ld d, 0
+        ld hl, (M4S_IMPORT_BLOCK)
+        or a
+        sbc hl, de
+        ld (M4S_IMPORT_BLOCK), hl
+        pop af
+        pop bc
         pop de
         pop hl
-        pop af
-        jr import_chunk_failed
+        ret
 
-import_send_memory_failed:
-        pop af
+import_load_buffer_base:
+        push de
+        ld hl, (M4S_IMPORT_CTRL)
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        ex de, hl
+        pop de
+        ret
 
-import_chunk_failed:
-        or a
+import_mark_buffer_consumed:
+        push hl
+        push de
+        ld hl, (M4S_IMPORT_CTRL)
+        push hl
+        ld de, 23                         ; IY+$17 / header+19: data length.
+        add hl, de
+        xor a
+        ld (hl), a
+        inc hl
+        ld (hl), a
+        pop hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        dec hl
+        ex de, hl
+        ld de, 2048
+        add hl, de
+        ex de, hl
+        ld hl, (M4S_IMPORT_CTRL)
+        inc hl
+        inc hl
+        ld (hl), e
+        inc hl
+        ld (hl), d
+        pop de
+        pop hl
         ret
 
 rsx_import_close_error:

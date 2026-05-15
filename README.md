@@ -472,10 +472,10 @@ shared folder:
 The first argument is the CPC disk filename. The second argument is the shared
 folder destination path, resolved using the same relative path rules as `|cp`
 and `|savem`. The host refuses existing destinations. The first implementation
-uses AMSDOS direct load into scratch RAM at `&2000`, with a 2KB AMSDOS buffer
-at `&B800`. It writes the loaded payload to the shared folder in 64-byte chunks
-and keeps the same 16-bit offset limit as the other proof write paths. It
-currently copies the payload only, not the 128-byte AMSDOS header.
+streams from AMSDOS' 2KB buffer at `&6000`, writes the payload to the shared
+folder in 64-byte chunks, and keeps the same 16-bit offset limit as the other
+proof write paths. It currently copies the payload only, not the 128-byte
+AMSDOS header.
 
 ## Testing `|HELLO` in BASIC
 
