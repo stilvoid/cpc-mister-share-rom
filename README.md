@@ -301,15 +301,16 @@ root, run `|cd` with no arguments.
 ## Stage 4A text file streaming
 
 With the matching custom Main_MiSTer binary and Amstrad core installed,
-`|cat` reads a single file from the resolved shared folder and prints it:
+`|cat` reads a file from the resolved shared folder and prints it:
 
 ```basic
 |cat,"HELLO.TXT"
+|cat,"../NOTES.TXT"
 ```
 
-The command currently accepts a single filename only. Path separators and `..`
-are rejected, so files are constrained to the shared folder. The response uses
-the same 2048-byte stream buffer as the directory listing proof, and text output
+The command accepts relative paths, rooted paths relative to the shared root,
+and `..` traversal that stays inside the shared root. The response uses the same
+2048-byte stream buffer as the directory listing proof, and text output
 normalizes bare LF to CRLF for CPC display.
 
 ## Stage 4B binary dump proof
@@ -319,6 +320,7 @@ ASCII hex dump:
 
 ```basic
 |hexdump,"FILE.BIN"
+|hexdump,"../FILE.BIN"
 ```
 
 The current mailbox stream is zero-terminated, so `|hexdump` does not stream raw
@@ -332,6 +334,7 @@ metadata if the header checksum is valid:
 
 ```basic
 |stat,"FILE.BIN"
+|stat,"../FILE.BIN"
 ```
 
 When a valid AMSDOS header is present, the output includes the AMSDOS filename,
@@ -351,6 +354,7 @@ With two arguments, the second argument is the destination address:
 
 ```basic
 |loadm,"FILE.BIN",&8000
+|loadm,"../FILE.BIN",&7000
 ```
 
 Main_MiSTer returns raw file chunks with a two-byte little-endian byte count
@@ -365,6 +369,7 @@ CPC RAM range.
 
 ```basic
 |exec,"FILE.BIN"
+|exec,"../FILE.BIN"
 ```
 
 It first prints the same metadata as `|stat`, then prompts:
@@ -385,13 +390,15 @@ environment.
 
 ```basic
 |savem,"FILE.BIN",&4000,&0100
+|savem,"../FILE.BIN",&4000,&0100
 ```
 
 The first numeric argument is the CPC source address and the second is the byte
 length. The ROM currently sends 64-byte chunks encoded as ASCII hex, which keeps
 the write proof compatible with the existing zero-terminated mailbox request
-buffer. Offset handling is still 16-bit, so this is a proof command rather than
-a general large-file save API.
+buffer. Relative paths are resolved inside the shared root. Offset handling is
+still 16-bit, so this is a proof command rather than a general large-file save
+API.
 
 ## Stage 4G create directories
 

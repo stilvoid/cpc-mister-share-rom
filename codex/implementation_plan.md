@@ -116,6 +116,10 @@ Implement:
 - Shared path validation in one host-side helper used by every command.
 - A documented overwrite policy. Default should be conservative: refuse to
   overwrite unless the RSX explicitly asks for it.
+- Shared file commands should accept normalized relative paths such as
+  `../file.bin` and `subdir/file.bin` while refusing traversal above the shared
+  root. Implemented for `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, and
+  `|savem`.
 
 Acceptance:
 

@@ -108,11 +108,13 @@ resets to `CWD: /`.
 ## Stage 4A: Type a shared text file
 
 1. Install the matching custom Main_MiSTer binary and Amstrad core.
-2. Put a small text file in the resolved shared folder.
+2. Put a small text file in the resolved shared folder and another in its
+   parent folder.
 3. Start the Amstrad core and run:
 
 ```basic
 |cat,"HELLO.TXT"
+|cat,"../PARENT.TXT"
 ```
 
 Expected:
@@ -164,7 +166,8 @@ Headerless files should print `AMSDOS: NO HEADER`.
 ## Stage 4D: Load a shared binary file
 
 1. Install the matching custom Main_MiSTer binary, Amstrad core, and ROM.
-2. Put a small binary file in the resolved shared folder.
+2. Put a small binary file in the resolved shared folder and another in its
+   parent folder.
 3. Start the Amstrad core and run:
 
 ```basic
@@ -184,10 +187,11 @@ Then try an explicit destination:
 
 ```basic
 |loadm,"FILE.BIN",&8000
+|loadm,"../PARENT.BIN",&7000
 ```
 
-Confirm the bytes at `&8000` match the source file. The proof command reads in
-512-byte chunks, and the file offset is currently 16-bit.
+Confirm the bytes at `&8000` and `&7000` match the source files. The proof
+command reads in 512-byte chunks, and the file offset is currently 16-bit.
 
 ## Stage 4E: Load and run an AMSDOS binary
 
@@ -213,6 +217,7 @@ you press `Y`.
 
 ```basic
 |savem,"OUT.BIN",&4000,&0100
+|savem,"../PARENT.OUT",&4000,&0100
 ```
 
 Expected:
@@ -221,8 +226,9 @@ Expected:
 Saved
 ```
 
-Confirm `OUT.BIN` appears in the current shared folder and compare it with the
-bytes at `&4000`. `|hexdump,"OUT.BIN"` should show the saved data too.
+Confirm `OUT.BIN` appears in the current shared folder, `PARENT.OUT` appears in
+the parent folder, and both compare with the bytes at `&4000`.
+`|hexdump,"OUT.BIN"` should show the saved data too.
 
 ## Stage 4G: Create a shared folder directory
 
