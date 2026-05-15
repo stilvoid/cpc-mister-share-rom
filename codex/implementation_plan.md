@@ -271,7 +271,8 @@ Goal: make the shared folder usable without leaving the CPC.
 
 Implement after copy/save/load are stable:
 
-- `|mkdir,"DIR"` to create directories.
+- `|mkdir,"DIR"` to create directories. Implemented in Stage 4.8 for a single
+  child directory in the current shared folder.
 - `|mv,"OLD","NEW"` to rename a file or directory.
 - `|rm,"FILE"` to delete a file, with conservative confirmation or explicit
   force syntax.

@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.7 installed
+ M4S ROM Stage 4.8 installed
 
 ```
 
@@ -224,6 +224,20 @@ Saved
 Confirm `OUT.BIN` appears in the current shared folder and compare it with the
 bytes at `&4000`. `|hexdump,"OUT.BIN"` should show the saved data too.
 
+## Stage 4G: Create a shared folder directory
+
+1. Install the matching custom Main_MiSTer binary and ROM.
+2. Start the Amstrad core and run:
+
+```basic
+|mkdir,"NEW"
+|ls
+```
+
+Expected:
+
+`|mkdir,"NEW"` prints `Created: NEW`, and `|ls` shows `NEW/`.
+
 ## Debug hints
 
 - If `|HELLO` is unknown, debug ROM header/RSX registration first.
@@ -232,6 +246,6 @@ bytes at `&4000`. `|hexdump,"OUT.BIN"` should show the saved data too.
 - If `|ls` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If live listing does not update, confirm the custom Main_MiSTer binary is
   running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|cd`, `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, or `|savem` hangs, check the CPC-to-HPS request status path in
+- If `|cd`, `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, `|savem`, or `|mkdir` hangs, check the CPC-to-HPS request status path in
   `m4s_mailbox` and `m4s_hps_ext`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.

@@ -14,7 +14,8 @@ Main_MiSTer hook that serves live `shared` folder listings on demand through
 then adds a first chunked binary load proof with `|loadm,"FILE.BIN"`. Stage
 4.5 adds `|cd` navigation within the shared folder. Stage 4.6 adds a first raw
 memory save proof with `|savem,"FILE.BIN",&4000,&0100`. Stage 4.7 adds the
-Unix-like command aliases.
+Unix-like command aliases. Stage 4.8 adds `|mkdir`, the first shared-folder
+management command.
 
 ## Stage 1-4 status
 
@@ -24,7 +25,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.7 installed
+ M4S ROM Stage 4.8 installed
 
 ```
 
@@ -391,6 +392,17 @@ the write proof compatible with the existing zero-terminated mailbox request
 buffer. Offset handling is still 16-bit, so this is a proof command rather than
 a general large-file save API.
 
+## Stage 4G create directories
+
+`|mkdir` creates one directory in the current shared folder:
+
+```basic
+|mkdir,"NEW"
+```
+
+The command currently accepts a single directory name only. Path separators and
+`..` are rejected, so creation is constrained to the current shared folder.
+
 ## Testing `|HELLO` in BASIC
 
 1. Build the ROM:
@@ -402,7 +414,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.7 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.8 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 
