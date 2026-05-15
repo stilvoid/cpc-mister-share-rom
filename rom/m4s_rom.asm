@@ -40,14 +40,16 @@ CAS_IN_CHAR     equ &BC80                ; Firmware: read byte from AMSDOS input
 CAS_IN_DIRECT   equ &BC83                ; Firmware: read file directly to RAM.
 CHAR_CR         equ 13
 CHAR_LF         equ 10
+CHAR_EOF        equ 26
 M4S_LOAD_ADDR   equ &4000
-M4S_DISC_BUFFER equ &6000                ; 2KB AMSDOS input buffer.
+M4S_DISC_BUFFER equ &8800                ; 2KB AMSDOS input buffer.
 M4S_IMPORT_HEADER equ &9000              ; 128-byte saved AMSDOS header.
-M4S_IMPORT_REMAIN equ &7F00              ; 16-bit remaining diskread bytes.
-M4S_IMPORT_CTRL equ &7F02                ; 16-bit AMSDOS buffer control ptr.
-M4S_IMPORT_BLOCK equ &7F04               ; 16-bit bytes left in AMSDOS buffer.
-M4S_IMPORT_CHUNK equ &7F06               ; 8-bit current shared write length.
-M4S_IMPORT_REQ_TYPE equ &7F07            ; "S" create/truncate or "W" patch.
+M4S_IMPORT_REMAIN equ &9800              ; 16-bit remaining diskread bytes.
+M4S_IMPORT_FILEHEAD equ &9802            ; 16-bit AMSDOS buffer control ptr.
+M4S_IMPORT_BLOCK equ &9804               ; 16-bit bytes left in AMSDOS buffer.
+M4S_IMPORT_CHUNK equ &9806               ; 8-bit current shared write length.
+M4S_IMPORT_REQ_TYPE equ &9807            ; "S" create/truncate or "W" patch.
+M4S_IMPORT_DONE equ &9808                ; 16-bit diskread payload bytes sent.
 
         org KL_ROM_BASE
 
@@ -996,6 +998,7 @@ rsx_import_nonempty:
         pop ix
         jp nc, rsx_import_error
 
+        push bc                           ; CAS_IN_OPEN returned length.
         push hl                           ; Preserve AMSDOS header pointer.
         ld de, 24                         ; AMSDOS logical length field.
         add hl, de
@@ -1003,13 +1006,17 @@ rsx_import_nonempty:
         inc hl
         ld b, (hl)                        ; BC = file payload length.
         ld (M4S_IMPORT_REMAIN), bc
+        push bc
+        call import_print_lengths
+        pop bc
         pop hl                            ; HL = AMSDOS header pointer.
+        pop bc
         push hl
         call import_save_header
         pop hl
-        ld de, -4
+        ld de, -5
         add hl, de
-        ld (M4S_IMPORT_CTRL), hl          ; Hidden AMSDOS buffer control.
+        ld (M4S_IMPORT_FILEHEAD), hl       ; Hidden AMSDOS buffer control.
 
         call import_create_destination
         jp nc, rsx_import_close_error
@@ -1030,11 +1037,14 @@ rsx_import_refill:
         jr z, rsx_import_close_done
 
         push de
+        call import_prepare_next_read
         push ix
-        call CAS_IN_CHAR                  ; Fill/refill the 2KB AMSDOS buffer.
+        call CAS_IN_CHAR
         pop ix
         pop de
-        jp nc, rsx_import_close_error
+        jr c, rsx_import_copy_buffer
+        cp CHAR_EOF
+        jp nz, rsx_import_close_error
 
 rsx_import_copy_buffer:
         ld bc, (M4S_IMPORT_REMAIN)
@@ -1083,13 +1093,14 @@ rsx_import_advance_chunk:
         jr rsx_import_block_loop
 
 rsx_import_block_done:
-        call import_mark_buffer_consumed
         jr rsx_import_refill
 
 rsx_import_close_done:
+        ld (M4S_IMPORT_DONE), de
         push ix
         call CAS_IN_CLOSE
         pop ix
+        call import_print_done
         call import_prepend_saved_header
         jp nc, rsx_import_error
         ld hl, msg_import_done
@@ -1104,6 +1115,46 @@ import_save_header:
         ldir
         pop bc
         pop de
+        ret
+
+; Diagnostic for diskread length mismatches.  BC is the AMSDOS header length and
+; the next word on the stack is the length returned directly by CAS_IN_OPEN.
+import_print_lengths:
+        push hl
+        push de
+        push bc
+        ld hl, msg_import_open_len
+        call print_string
+        ld hl, 12
+        add hl, sp
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        ex de, hl
+        call print_hex_word
+        ld hl, msg_import_header_len
+        call print_string
+        pop hl
+        call print_hex_word
+        ld hl, msg_newline
+        call print_string
+        pop de
+        pop hl
+        ret
+
+import_print_done:
+        push hl
+        ld hl, msg_import_done_len
+        call print_string
+        ld hl, (M4S_IMPORT_DONE)
+        call print_hex_word
+        ld hl, msg_import_remain_len
+        call print_string
+        ld hl, (M4S_IMPORT_REMAIN)
+        call print_hex_word
+        ld hl, msg_newline
+        call print_string
+        pop hl
         ret
 
 import_prepend_saved_header:
@@ -1159,7 +1210,8 @@ import_decrease_block:
 
 import_load_buffer_base:
         push de
-        ld hl, (M4S_IMPORT_CTRL)
+        ld hl, (M4S_IMPORT_FILEHEAD)
+        inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)
@@ -1167,32 +1219,36 @@ import_load_buffer_base:
         pop de
         ret
 
-import_mark_buffer_consumed:
+; Prepare AMSDOS for another buffered read. This mirrors the M4 ROM's copy
+; path: point the private buffer index to the end of the next requested block
+; and clear the buffered byte count, so CAS_IN_CHAR refills the 2KB buffer.
+import_prepare_next_read:
         push hl
         push de
-        ld hl, (M4S_IMPORT_CTRL)
-        push hl
-        ld de, 23                         ; IY+$17 / header+19: data length.
-        add hl, de
-        xor a
-        ld (hl), a
-        inc hl
-        ld (hl), a
-        pop hl
-        ld e, (hl)
-        inc hl
-        ld d, (hl)
-        dec hl
-        ex de, hl
-        ld de, 2048
-        add hl, de
-        ex de, hl
-        ld hl, (M4S_IMPORT_CTRL)
-        inc hl
-        inc hl
-        ld (hl), e
-        inc hl
-        ld (hl), d
+        push bc
+        push iy
+        ld hl, (M4S_IMPORT_REMAIN)
+        ld a, h
+        cp 8
+        jr c, import_prepare_short
+        ld bc, 2048
+        jr import_prepare_have_size
+
+import_prepare_short:
+        ld b, h
+        ld c, l
+
+import_prepare_have_size:
+        ld iy, (M4S_IMPORT_FILEHEAD)
+        ld l, (iy+1)
+        ld h, (iy+2)
+        add hl, bc
+        ld (iy+3), l
+        ld (iy+4), h
+        ld (iy+24), 0
+        ld (iy+25), 0
+        pop iy
+        pop bc
         pop de
         pop hl
         ret
@@ -2031,6 +2087,33 @@ print_string:
         inc hl
         jr print_string
 
+print_hex_word:
+        ld a, h
+        call print_hex_byte
+        ld a, l
+        call print_hex_byte
+        ret
+
+print_hex_byte:
+        push af
+        rrca
+        rrca
+        rrca
+        rrca
+        call print_hex_nibble
+        pop af
+
+print_hex_nibble:
+        and &0F
+        add a, "0"
+        cp "9" + 1
+        jr c, print_hex_digit
+        add a, 7
+
+print_hex_digit:
+        call TXT_OUTPUT
+        ret
+
 msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
@@ -2069,6 +2152,21 @@ msg_rm_usage:
 
 msg_import_usage:
         db "Usage: |diskread,", 34, "DISC", 34, ",", 34, "SHARED", 34, 13, 10, 0
+
+msg_import_open_len:
+        db "OPEN=", 0
+
+msg_import_header_len:
+        db " HDR=", 0
+
+msg_import_done_len:
+        db " DONE=", 0
+
+msg_import_remain_len:
+        db " REM=", 0
+
+msg_newline:
+        db 13, 10, 0
 
 msg_import_done:
         db "Disk read OK", 13, 10, 0
