@@ -12,7 +12,6 @@
 ;     |pwd
 ;     |type,"FILE.TXT"
 ;     |hexdump,"FILE.BIN"
-;     |xxd,"FILE.BIN"
 ;     |stat,"FILE.BIN"
 ;     |loadm,"FILE.BIN",&8000
 ;     |savem,"FILE.BIN",&4000,&0100
@@ -67,14 +66,13 @@ rom_prefix:
         jp rsx_pwd                       ; Entry 4: BASIC command |pwd.
         jp rsx_m4type                    ; Entry 5: BASIC command |type.
         jp rsx_m4dump                    ; Entry 6: BASIC command |hexdump.
-        jp rsx_m4dump                    ; Entry 7: BASIC command |xxd.
-        jp rsx_m4info                    ; Entry 8: BASIC command |stat.
-        jp rsx_m4load                    ; Entry 9: BASIC command |loadm.
-        jp rsx_m4save                    ; Entry 10: BASIC command |savem.
-        jp rsx_m4loadh                   ; Entry 11: BASIC command |exec.
-        jp rsx_mkdir                     ; Entry 12: BASIC command |mkdir.
-        jp rsx_mv                        ; Entry 13: BASIC command |mv.
-        jp rsx_rm                        ; Entry 14: BASIC command |rm.
+        jp rsx_m4info                    ; Entry 7: BASIC command |stat.
+        jp rsx_m4load                    ; Entry 8: BASIC command |loadm.
+        jp rsx_m4save                    ; Entry 9: BASIC command |savem.
+        jp rsx_m4loadh                   ; Entry 10: BASIC command |exec.
+        jp rsx_mkdir                     ; Entry 11: BASIC command |mkdir.
+        jp rsx_mv                        ; Entry 12: BASIC command |mv.
+        jp rsx_rm                        ; Entry 13: BASIC command |rm.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -94,14 +92,13 @@ command_names:
         db "PW", &C4                     ; Entry 4: rsx_pwd ("D" + bit 7).
         db "TYP", &C5                    ; Entry 5: rsx_m4type ("E" + bit 7).
         db "HEXDUM", &D0                 ; Entry 6: rsx_m4dump ("P" + bit 7).
-        db "XX", &C4                     ; Entry 7: rsx_m4dump ("D" + bit 7).
-        db "STA", &D4                    ; Entry 8: rsx_m4info ("T" + bit 7).
-        db "LOAD", &CD                   ; Entry 9: rsx_m4load ("M" + bit 7).
-        db "SAVE", &CD                   ; Entry 10: rsx_m4save ("M" + bit 7).
-        db "EXE", &C3                    ; Entry 11: rsx_m4loadh ("C" + bit 7).
-        db "MKDI", &D2                   ; Entry 12: rsx_mkdir ("R" + bit 7).
-        db "M", &D6                      ; Entry 13: rsx_mv ("V" + bit 7).
-        db "R", &CD                      ; Entry 14: rsx_rm ("M" + bit 7).
+        db "STA", &D4                    ; Entry 7: rsx_m4info ("T" + bit 7).
+        db "LOAD", &CD                   ; Entry 8: rsx_m4load ("M" + bit 7).
+        db "SAVE", &CD                   ; Entry 9: rsx_m4save ("M" + bit 7).
+        db "EXE", &C3                    ; Entry 10: rsx_m4loadh ("C" + bit 7).
+        db "MKDI", &D2                   ; Entry 11: rsx_mkdir ("R" + bit 7).
+        db "M", &D6                      ; Entry 12: rsx_mv ("V" + bit 7).
+        db "R", &CD                      ; Entry 13: rsx_rm ("M" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -431,7 +428,7 @@ rsx_m4type_output:
         jr rsx_m4type_loop
 
 ; ---------------------------------------------------------------------------
-; |hexdump,"filename" and |xxd,"filename" RSX implementation.
+; |hexdump,"filename" RSX implementation.
 ;
 ; The current mailbox stream is zero-terminated, so it cannot carry arbitrary
 ; binary bytes directly.  The command asks Main_MiSTer to read the file and return an

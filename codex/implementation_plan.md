@@ -150,7 +150,7 @@ Preferred primary names:
 - `|cd,"path"` changes the current shared folder directory.
 - `|pwd` prints the current shared folder directory.
 - `|type,"file"` prints a text file.
-- `|hexdump,"file"` or `|xxd,"file"` dumps binary data as hex.
+- `|hexdump,"file"` dumps binary data as hex.
 - `|stat,"file"` shows file size and AMSDOS header metadata.
 - `|loadm,"file",&4000` loads a raw shared file into CPC memory.
 - `|savem,"file",&4000,&0100` saves a CPC memory range to shared.
