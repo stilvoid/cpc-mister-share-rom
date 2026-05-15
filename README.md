@@ -9,11 +9,12 @@ expansion ROM that proves the CPC can see the ROM and dispatch an RSX command.
 Stage 2 adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory
 index through MiSTer's existing file download path. Stage 3B adds a custom
 Main_MiSTer hook that serves live `shared` folder listings on demand through
-`EXT_BUS`. Stage 4 starts a read-only path with `|M4TYPE,"FILE.TXT"` and
-`|M4DUMP,"FILE.BIN"`, adds `|M4INFO,"FILE.BIN"` for AMSDOS header diagnostics,
-then adds a first chunked binary load proof with `|M4LOAD,"FILE.BIN"`. Stage
-4.5 adds `|M4CD` navigation within the shared folder. Stage 4.6 adds a first raw
-memory save proof with `|M4SAVE,"FILE.BIN",&4000,&0100`.
+`EXT_BUS`. Stage 4 starts a read-only path with `|cat,"FILE.TXT"` and
+`|hexdump,"FILE.BIN"`, adds `|stat,"FILE.BIN"` for AMSDOS header diagnostics,
+then adds a first chunked binary load proof with `|loadm,"FILE.BIN"`. Stage
+4.5 adds `|cd` navigation within the shared folder. Stage 4.6 adds a first raw
+memory save proof with `|savem,"FILE.BIN",&4000,&0100`. Stage 4.7 adds the
+Unix-like command aliases.
 
 ## Stage 1-4 status
 
@@ -23,7 +24,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.6 installed
+ M4S ROM Stage 4.7 installed
 
 ```
 
@@ -42,7 +43,7 @@ M4S ROM OK
 - A second RSX command:
 
 ```basic
-|M4DIR
+|ls
 ```
 
 Expected output before an index file is loaded:
@@ -64,25 +65,25 @@ GAMES
 - A mock FPGA mailbox in `rtl/m4s_mailbox.sv` for commands `PING` and
   `DIR_BEGIN`.
 - A MiSTer core menu entry `Load M4S index` that accepts a plain text file and
-  streams it back via `|M4DIR`.
+  streams it back via `|ls`.
 - A small Amstrad-specific Main_MiSTer helper that lists the configured
   `shared` folder and sends it to the core over `EXT_BUS`.
-- A current-directory model for the helper, controlled by `|M4CD`.
+- A current-directory model for the helper, controlled by `|cd`.
 - An FPGA `EXT_BUS` bridge in `rtl/m4s_hps_ext.sv` that loads that live listing
   into the same directory index buffer used by `Load M4S index`.
-- A read-only `|M4TYPE,"FILE.TXT"` proof that sends a filename from the CPC to
+- A read-only `|cat,"FILE.TXT"` proof that sends a filename from the CPC to
   Main_MiSTer and streams the file contents back through the mailbox.
-- A read-only `|M4DUMP,"FILE.BIN"` proof that asks Main_MiSTer to read a file
+- A read-only `|hexdump,"FILE.BIN"` proof that asks Main_MiSTer to read a file
   and return an ASCII hex dump, avoiding zero-byte framing issues while testing
   binary reads.
-- A read-only `|M4INFO,"FILE.BIN"` command that prints file size and AMSDOS
+- A read-only `|stat,"FILE.BIN"` command that prints file size and AMSDOS
   header metadata when the header checksum is valid.
-- A proof `|M4LOAD,"FILE.BIN"` command that loads raw bytes from the shared
+- A proof `|loadm,"FILE.BIN"` command that loads raw bytes from the shared
   folder into CPC RAM at `&4000` using 512-byte chunks.
-- A deliberately dangerous `|M4LOADH,"FILE.BIN"` command that displays AMSDOS
+- A deliberately dangerous `|exec,"FILE.BIN"` command that displays AMSDOS
   header info, prompts for confirmation, loads the payload at the AMSDOS load
   address, and jumps to the AMSDOS entry address.
-- A proof `|M4SAVE,"FILE.BIN",&4000,&0100` command that saves a CPC memory
+- A proof `|savem,"FILE.BIN",&4000,&0100` command that saves a CPC memory
   range to a file in the current shared folder using small ASCII-hex chunks.
 
 Not implemented yet:
@@ -92,11 +93,11 @@ Not implemented yet:
 - Explicit copy commands between the shared folder and a mounted CPC disk.
 - File management helpers such as mkdir, rename, and delete.
 
-Planned user-facing commands should drop the proof `M4` prefix and use
-Unix-like RSX names where they do not collide with common CPC disk ROMs. The
-current `M4*` commands remain useful fallbacks while the short names settle.
+User-facing commands now use Unix-like RSX names where they do not collide with
+common CPC disk ROMs. The current `M4*` commands remain useful fallbacks while
+the short names settle.
 Avoid `|DIR`, `|ERA`, and `|REN` as primary names because AMSDOS already uses
-them. Preferred future names are `|ls`, `|cd`, `|pwd`, `|cat`, `|stat`,
+them. Preferred names are `|ls`, `|cd`, `|pwd`, `|cat`, `|stat`,
 `|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|get`, `|put`,
 `|mkdir`, `|mv`, and `|rm`.
 
@@ -230,15 +231,15 @@ GAMES
 5. In BASIC, run:
 
 ```basic
-|M4DIR
+|ls
 ```
 
 The index buffer is currently 2048 bytes and is treated as zero-terminated. If
-no index has been loaded, `|M4DIR` prints `NO M4S INDEX`.
+no index has been loaded, `|ls` prints `NO M4S INDEX`.
 
 ## Stage 3B live shared folder listing
 
-With the matching custom Main_MiSTer binary installed, `|M4DIR` asks Main_MiSTer
+With the matching custom Main_MiSTer binary installed, `|ls` asks Main_MiSTer
 to enumerate the configured shared folder and push a text listing into the core.
 
 The base folder follows Main_MiSTer's existing convention:
@@ -262,46 +263,46 @@ Directory names are suffixed with `/`. The listing is capped to the same
 ## Stage 4 shared-folder navigation
 
 The helper maintains a current directory relative to the configured `shared`
-folder. The current directory affects `|M4DIR`, `|M4TYPE`, `|M4DUMP`,
-`|M4INFO`, `|M4LOAD`, `|M4LOADH`, and `|M4SAVE`.
+folder. The current directory affects `|ls`, `|cat`, `|hexdump`,
+`|stat`, `|loadm`, `|exec`, and `|savem`.
 
 Reset to the shared root:
 
 ```basic
-|M4CD
+|cd
 ```
 
 Enter a child directory or nested path:
 
 ```basic
-|M4CD,"GAMES"
-|M4CD,"GAMES/DIZZY"
+|cd,"GAMES"
+|cd,"GAMES/DIZZY"
 ```
 
 Move relative to the current folder:
 
 ```basic
-|M4CD,".."
-|M4CD,"../TESTS"
+|cd,".."
+|cd,"../TESTS"
 ```
 
 Rooted paths are relative to the shared root:
 
 ```basic
-|M4CD,"/GAMES"
+|cd,"/GAMES"
 ```
 
 The helper normalizes `.` and `..`, case-corrects existing directory names from
 the host filesystem, and rejects traversal above the shared root. To get back to
-root, run `|M4CD` with no arguments.
+root, run `|cd` with no arguments.
 
 ## Stage 4A text file streaming
 
 With the matching custom Main_MiSTer binary and Amstrad core installed,
-`|M4TYPE` reads a single file from the resolved shared folder and prints it:
+`|cat` reads a single file from the resolved shared folder and prints it:
 
 ```basic
-|M4TYPE,"HELLO.TXT"
+|cat,"HELLO.TXT"
 ```
 
 The command currently accepts a single filename only. Path separators and `..`
@@ -311,24 +312,24 @@ normalizes bare LF to CRLF for CPC display.
 
 ## Stage 4B binary dump proof
 
-`|M4DUMP` reads a single file from the resolved shared folder and prints an
+`|hexdump` reads a single file from the resolved shared folder and prints an
 ASCII hex dump:
 
 ```basic
-|M4DUMP,"FILE.BIN"
+|hexdump,"FILE.BIN"
 ```
 
-The current mailbox stream is zero-terminated, so `|M4DUMP` does not stream raw
+The current mailbox stream is zero-terminated, so `|hexdump` does not stream raw
 binary bytes to the CPC yet. Main_MiSTer reads the binary file and formats the
 response as hex rows. The dump is capped by the same 2048-byte stream buffer.
 
 ## Stage 4C AMSDOS file info
 
-`|M4INFO` reads the first 128 bytes of a shared file and reports AMSDOS header
+`|stat` reads the first 128 bytes of a shared file and reports AMSDOS header
 metadata if the header checksum is valid:
 
 ```basic
-|M4INFO,"FILE.BIN"
+|stat,"FILE.BIN"
 ```
 
 When a valid AMSDOS header is present, the output includes the AMSDOS filename,
@@ -337,17 +338,17 @@ real length. If the checksum does not match, the file is reported as headerless.
 
 ## Stage 4D binary load proof
 
-`|M4LOAD` loads a shared binary file into CPC RAM. With one argument it keeps
+`|loadm` loads a shared binary file into CPC RAM. With one argument it keeps
 the original proof default of `&4000`:
 
 ```basic
-|M4LOAD,"FILE.BIN"
+|loadm,"FILE.BIN"
 ```
 
 With two arguments, the second argument is the destination address:
 
 ```basic
-|M4LOAD,"FILE.BIN",&8000
+|loadm,"FILE.BIN",&8000
 ```
 
 Main_MiSTer returns raw file chunks with a two-byte little-endian byte count
@@ -358,13 +359,13 @@ CPC RAM range.
 
 ## Stage 4E AMSDOS header load and run
 
-`|M4LOADH` is an opt-in diagnostic for real AMSDOS binaries:
+`|exec` is an opt-in diagnostic for real AMSDOS binaries:
 
 ```basic
-|M4LOADH,"FILE.BIN"
+|exec,"FILE.BIN"
 ```
 
-It first prints the same metadata as `|M4INFO`, then prompts:
+It first prints the same metadata as `|stat`, then prompts:
 
 ```text
 Load and CALL entry? Y/N
@@ -378,10 +379,10 @@ environment.
 
 ## Stage 4F raw memory save
 
-`|M4SAVE` writes a CPC memory range to the current shared folder:
+`|savem` writes a CPC memory range to the current shared folder:
 
 ```basic
-|M4SAVE,"FILE.BIN",&4000,&0100
+|savem,"FILE.BIN",&4000,&0100
 ```
 
 The first numeric argument is the CPC source address and the second is the byte
@@ -401,7 +402,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.6 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.7 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 
@@ -421,7 +422,7 @@ ROM prefix before looking at any future mailbox work.
 ## Stage 2 notes
 
 Stage 2 should add the simplest possible CPC-to-core mailbox path, still without
-host filesystem access. The ROM can then grow a second command such as `|M4DIR`
+host filesystem access. The ROM can then grow a second command such as `|ls`
 that requests a hardcoded response from FPGA-side logic.
 
 Keep the boundary clear:

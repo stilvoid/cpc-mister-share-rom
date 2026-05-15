@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.6 installed
+ M4S ROM Stage 4.7 installed
 
 ```
 
@@ -30,7 +30,7 @@ M4S ROM OK
 Run:
 
 ```basic
-|M4DIR
+|ls
 ```
 
 Expected:
@@ -47,7 +47,7 @@ NO M4S INDEX
 4. Run:
 
 ```basic
-|M4DIR
+|ls
 ```
 
 Expected when using the example file:
@@ -68,7 +68,7 @@ GAMES
 4. Run:
 
 ```basic
-|M4DIR
+|ls
 ```
 
 Expected:
@@ -86,23 +86,23 @@ followed by the files and folders from the shared folder.
 3. Run:
 
 ```basic
-|M4DIR
-|M4CD,"GAMES"
-|M4DIR
-|M4CD,"DIZZY"
-|M4DIR
-|M4CD,".."
-|M4DIR
-|M4CD,"/GAMES/DIZZY"
-|M4DIR
-|M4CD
-|M4DIR
+|ls
+|cd,"GAMES"
+|ls
+|cd,"DIZZY"
+|ls
+|cd,".."
+|ls
+|cd,"/GAMES/DIZZY"
+|ls
+|cd
+|ls
 ```
 
 Expected:
 
-`|M4CD,"GAMES"` prints `CWD: /GAMES`, nested and parent paths update `CWD`
-correctly, file commands resolve relative to that directory, and bare `|M4CD`
+`|cd,"GAMES"` prints `CWD: /GAMES`, nested and parent paths update `CWD`
+correctly, file commands resolve relative to that directory, and bare `|cd`
 resets to `CWD: /`.
 
 ## Stage 4A: Type a shared text file
@@ -112,7 +112,7 @@ resets to `CWD: /`.
 3. Start the Amstrad core and run:
 
 ```basic
-|M4TYPE,"HELLO.TXT"
+|cat,"HELLO.TXT"
 ```
 
 Expected:
@@ -127,7 +127,7 @@ CRLF.
 3. Start the Amstrad core and run:
 
 ```basic
-|M4DUMP,"FILE.BIN"
+|hexdump,"FILE.BIN"
 ```
 
 Expected:
@@ -148,7 +148,7 @@ still zero-terminated.
 3. Start the Amstrad core and run:
 
 ```basic
-|M4INFO,"FILE.BIN"
+|stat,"FILE.BIN"
 ```
 
 Expected for a file with a valid AMSDOS header:
@@ -168,7 +168,7 @@ Headerless files should print `AMSDOS: NO HEADER`.
 3. Start the Amstrad core and run:
 
 ```basic
-|M4LOAD,"FILE.BIN"
+|loadm,"FILE.BIN"
 ```
 
 Expected:
@@ -183,7 +183,7 @@ Use a monitor, BASIC `PEEK`, or a small test program to confirm the bytes at
 Then try an explicit destination:
 
 ```basic
-|M4LOAD,"FILE.BIN",&8000
+|loadm,"FILE.BIN",&8000
 ```
 
 Confirm the bytes at `&8000` match the source file. The proof command reads in
@@ -196,7 +196,7 @@ Confirm the bytes at `&8000` match the source file. The proof command reads in
 3. Start the Amstrad core and run:
 
 ```basic
-|M4LOADH,"FILE.BIN"
+|exec,"FILE.BIN"
 ```
 
 Expected:
@@ -212,7 +212,7 @@ you press `Y`.
 3. Run:
 
 ```basic
-|M4SAVE,"OUT.BIN",&4000,&0100
+|savem,"OUT.BIN",&4000,&0100
 ```
 
 Expected:
@@ -222,16 +222,16 @@ Saved
 ```
 
 Confirm `OUT.BIN` appears in the current shared folder and compare it with the
-bytes at `&4000`. `|M4DUMP,"OUT.BIN"` should show the saved data too.
+bytes at `&4000`. `|hexdump,"OUT.BIN"` should show the saved data too.
 
 ## Debug hints
 
 - If `|HELLO` is unknown, debug ROM header/RSX registration first.
-- If `|HELLO` works but `|M4DIR` hangs, debug port decode/status bits.
+- If `|HELLO` works but `|ls` hangs, debug port decode/status bits.
 - If bytes are wrong, confirm I/O data direction and read strobe timing.
-- If `|M4DIR` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
+- If `|ls` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
 - If live listing does not update, confirm the custom Main_MiSTer binary is
   running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|M4CD`, `|M4TYPE`, `|M4DUMP`, `|M4INFO`, `|M4LOAD`, `|M4LOADH`, or `|M4SAVE` hangs, check the CPC-to-HPS request status path in
+- If `|cd`, `|cat`, `|hexdump`, `|stat`, `|loadm`, `|exec`, or `|savem` hangs, check the CPC-to-HPS request status path in
   `m4s_mailbox` and `m4s_hps_ext`.
 - If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.

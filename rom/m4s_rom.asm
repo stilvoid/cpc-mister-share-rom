@@ -15,6 +15,17 @@
 ;     |M4LOAD,"FILE.BIN",&8000
 ;     |M4LOADH,"FILE.BIN"
 ;     |M4SAVE,"FILE.BIN",&4000,&0100
+;     |ls
+;     |cd
+;     |cd,"DIR"
+;     |pwd
+;     |cat,"FILE.TXT"
+;     |hexdump,"FILE.BIN"
+;     |xxd,"FILE.BIN"
+;     |stat,"FILE.BIN"
+;     |loadm,"FILE.BIN",&8000
+;     |savem,"FILE.BIN",&4000,&0100
+;     |exec,"FILE.BIN"
 ;
 ; Running |HELLO prints:
 ;
@@ -65,6 +76,16 @@ rom_prefix:
         jp rsx_m4loadh                   ; Entry 7: BASIC command |M4LOADH.
         jp rsx_m4cd                      ; Entry 8: BASIC command |M4CD.
         jp rsx_m4save                    ; Entry 9: BASIC command |M4SAVE.
+        jp rsx_m4dir                     ; Entry 10: BASIC command |ls.
+        jp rsx_m4cd                      ; Entry 11: BASIC command |cd.
+        jp rsx_pwd                       ; Entry 12: BASIC command |pwd.
+        jp rsx_m4type                    ; Entry 13: BASIC command |cat.
+        jp rsx_m4dump                    ; Entry 14: BASIC command |hexdump.
+        jp rsx_m4dump                    ; Entry 15: BASIC command |xxd.
+        jp rsx_m4info                    ; Entry 16: BASIC command |stat.
+        jp rsx_m4load                    ; Entry 17: BASIC command |loadm.
+        jp rsx_m4save                    ; Entry 18: BASIC command |savem.
+        jp rsx_m4loadh                   ; Entry 19: BASIC command |exec.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -87,6 +108,16 @@ command_names:
         db "M4LOAD", &C8                 ; Entry 7: rsx_m4loadh ("H" + bit 7).
         db "M4C", &C4                    ; Entry 8: rsx_m4cd ("D" + bit 7).
         db "M4SAV", &C5                  ; Entry 9: rsx_m4save ("E" + bit 7).
+        db "L", &D3                      ; Entry 10: rsx_m4dir ("S" + bit 7).
+        db "C", &C4                      ; Entry 11: rsx_m4cd ("D" + bit 7).
+        db "PW", &C4                     ; Entry 12: rsx_pwd ("D" + bit 7).
+        db "CA", &D4                     ; Entry 13: rsx_m4type ("T" + bit 7).
+        db "HEXDUM", &D0                 ; Entry 14: rsx_m4dump ("P" + bit 7).
+        db "XX", &C4                     ; Entry 15: rsx_m4dump ("D" + bit 7).
+        db "STA", &D4                    ; Entry 16: rsx_m4info ("T" + bit 7).
+        db "LOAD", &CD                   ; Entry 17: rsx_m4load ("M" + bit 7).
+        db "SAVE", &CD                   ; Entry 18: rsx_m4save ("M" + bit 7).
+        db "EXE", &C3                    ; Entry 19: rsx_m4loadh ("C" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -257,6 +288,35 @@ rsx_m4cd_output:
         call TXT_OUTPUT
         ld e, a
         jr rsx_m4cd_loop
+
+; ---------------------------------------------------------------------------
+; |pwd RSX implementation.
+;
+; Main_MiSTer treats "C:." as a directory change to the current directory and
+; returns the current path without mutating it.
+; ---------------------------------------------------------------------------
+rsx_pwd:
+        cp 0
+        jr z, rsx_pwd_no_params
+        ld hl, msg_pwd_usage
+        call print_string
+        ret
+
+rsx_pwd_no_params:
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "C"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        ld a, "."
+        out (c), a
+        xor a
+        out (c), a
+        jr rsx_m4cd_send_command
 
 ; ---------------------------------------------------------------------------
 ; |M4TYPE,"filename" RSX implementation.
@@ -1118,22 +1178,25 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.6 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.7 installed", 13, 10, 13, 10, 0
 
 msg_cd_usage:
-        db "Usage: |M4CD,", 34, "DIR", 34, 13, 10, 0
+        db "Usage: |cd,", 34, "DIR", 34, 13, 10, 0
+
+msg_pwd_usage:
+        db "Usage: |pwd", 13, 10, 0
 
 msg_type_usage:
-        db "Usage: |M4TYPE,", 34, "FILE.TXT", 34, 13, 10, 0
+        db "Usage: |cat,", 34, "FILE.TXT", 34, 13, 10, 0
 
 msg_dump_usage:
-        db "Usage: |M4DUMP,", 34, "FILE.BIN", 34, 13, 10, 0
+        db "Usage: |hexdump,", 34, "FILE.BIN", 34, 13, 10, 0
 
 msg_info_usage:
-        db "Usage: |M4INFO,", 34, "FILE.BIN", 34, 13, 10, 0
+        db "Usage: |stat,", 34, "FILE.BIN", 34, 13, 10, 0
 
 msg_load_usage:
-        db "Usage: |M4LOAD,", 34, "FILE.BIN", 34, ",&8000", 13, 10, 0
+        db "Usage: |loadm,", 34, "FILE.BIN", 34, ",&8000", 13, 10, 0
 
 msg_load_done:
         db "Loaded", 13, 10, 0
@@ -1142,7 +1205,7 @@ msg_load_error:
         db "Load failed", 13, 10, 0
 
 msg_save_usage:
-        db "Usage: |M4SAVE,", 34, "FILE.BIN", 34, ",&4000,&0100", 13, 10, 0
+        db "Usage: |savem,", 34, "FILE.BIN", 34, ",&4000,&0100", 13, 10, 0
 
 msg_save_done:
         db "Saved", 13, 10, 0
@@ -1151,7 +1214,7 @@ msg_save_error:
         db "Save failed", 13, 10, 0
 
 msg_loadh_usage:
-        db "Usage: |M4LOADH,", 34, "FILE.BIN", 34, 13, 10, 0
+        db "Usage: |exec,", 34, "FILE.BIN", 34, 13, 10, 0
 
 msg_loadh_prompt:
         db "Load and CALL entry? Y/N ", 0
