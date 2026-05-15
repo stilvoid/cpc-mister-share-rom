@@ -9,7 +9,7 @@
 4. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.10 installed
+ M4S ROM Stage 4.11 installed
 
 ```
 
@@ -89,10 +89,12 @@ followed by the files and folders from the shared folder.
 |ls
 |cd,"GAMES"
 |ls
+|ls,"DIZZY"
 |cd,"DIZZY"
 |ls
 |cd,".."
 |ls
+|ls,"/GAMES/DIZZY"
 |cd,"/GAMES/DIZZY"
 |ls
 |cd
@@ -102,8 +104,9 @@ followed by the files and folders from the shared folder.
 Expected:
 
 `|cd,"GAMES"` prints `CWD: /GAMES`, nested and parent paths update `CWD`
-correctly, file commands resolve relative to that directory, and bare `|cd`
-resets to `CWD: /`.
+correctly, `|ls,"DIZZY"` and `|ls,"/GAMES/DIZZY"` list those folders without
+changing `CWD`, file commands resolve relative to that directory, and bare
+`|cd` resets to `CWD: /`.
 
 ## Stage 4A: Type a shared text file
 

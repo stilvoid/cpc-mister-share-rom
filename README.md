@@ -16,7 +16,7 @@ then adds a first chunked binary load proof with `|loadm,"FILE.BIN"`. Stage
 memory save proof with `|savem,"FILE.BIN",&4000,&0100`. Stage 4.7 adds the
 Unix-like command aliases. Stage 4.8 adds `|mkdir`, the first shared-folder
 management command. Stage 4.9 adds conservative `|mv` rename support. Stage 4.10 adds
-file-only `|rm` removal.
+file-only `|rm` removal. Stage 4.11 adds optional path arguments for `|ls`.
 
 ## Stage 1-4 status
 
@@ -26,7 +26,7 @@ Implemented:
 - A boot sign-on line:
 
 ```text
- M4S ROM Stage 4.10 installed
+ M4S ROM Stage 4.11 installed
 
 ```
 
@@ -259,8 +259,18 @@ FILE.BAS
 GAMES/
 ```
 
-Directory names are suffixed with `/`. The listing is capped to the same
-2048-byte index buffer as Stage 3A.
+Directory names are suffixed with `/`. With no argument, `|ls` lists the current
+shared folder directory. With one string argument, it lists another shared
+folder path without changing the current directory:
+
+```basic
+|ls,"GAMES"
+|ls,"../"
+|ls,"/GAMES/DIZZY"
+```
+
+Directory path arguments use the same normalization rules as `|cd`. The listing
+is capped to the same 2048-byte index buffer as Stage 3A.
 
 ## Stage 4 shared-folder navigation
 
@@ -444,7 +454,7 @@ make
 2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
    you want to test, for example `boot.e09`.
 3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.10 installed` followed by a
+4. Confirm the boot screen includes ` M4S ROM Stage 4.11 installed` followed by a
    blank line.
 5. At the BASIC prompt, type:
 

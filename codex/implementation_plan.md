@@ -95,6 +95,8 @@ Status: implemented and manually tested.
   binary files.
 - `|cd` changes the current helper directory relative to the configured
   shared folder, with normalized nested relative paths.
+- `|ls` and `|ls,"path"` list the current shared folder directory or another
+  normalized shared folder path without changing `CWD`.
 - `|savem,"FILE.BIN",&4000,&0100` saves a CPC memory range to the current
   shared folder.
 

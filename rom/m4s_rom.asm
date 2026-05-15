@@ -16,6 +16,7 @@
 ;     |M4LOADH,"FILE.BIN"
 ;     |M4SAVE,"FILE.BIN",&4000,&0100
 ;     |ls
+;     |ls,"DIR"
 ;     |cd
 ;     |cd,"DIR"
 ;     |pwd
@@ -176,9 +177,62 @@ rsx_hello:
 ; mock data.
 ; ---------------------------------------------------------------------------
 rsx_m4dir:
+        cp 0
+        jr z, rsx_m4dir_current
+        cp 1
+        jr z, rsx_m4dir_have_param
+        ld hl, msg_ls_usage
+        call print_string
+        ret
+
+rsx_m4dir_current:
         ld a, M4S_CMD_DIR_BEGIN
         ld bc, M4S_PORT_COMMAND
         out (c), a
+        xor a
+        ld e, a
+        jr rsx_m4dir_loop
+
+rsx_m4dir_have_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld a, (hl)                       ; A = string length.
+        or a
+        jr z, rsx_m4dir_current
+
+        ld b, a                          ; B = remaining length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = string data.
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "G"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+rsx_m4dir_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz rsx_m4dir_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
         xor a
         ld e, a
 
@@ -1440,7 +1494,10 @@ msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
-        db " M4S ROM Stage 4.10 installed", 13, 10, 13, 10, 0
+        db " M4S ROM Stage 4.11 installed", 13, 10, 13, 10, 0
+
+msg_ls_usage:
+        db "Usage: |ls,", 34, "DIR", 34, 13, 10, 0
 
 msg_cd_usage:
         db "Usage: |cd,", 34, "DIR", 34, 13, 10, 0
