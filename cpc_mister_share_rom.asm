@@ -2876,12 +2876,12 @@ print_progress_newline:
 
 msg_intro:
         db " CPC MiSTer Share "
-        include "../build/cpc_mister_share_version.inc"
+        include "build/cpc_mister_share_version.inc"
         db 13, 10, 13, 10, 0
 
 msg_about:
         db "CPC MiSTer Share "
-        include "../build/cpc_mister_share_version.inc"
+        include "build/cpc_mister_share_version.inc"
         db 13, 10
         db "|about", 13, 10
         db "|cd[,", 34, "DIR", 34, "]", 13, 10

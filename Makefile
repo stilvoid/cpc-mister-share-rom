@@ -1,7 +1,7 @@
 ASM ?= pasmo
 
-ROM_SRC := rom/cpc_mister_share_rom.asm
-ROM_INC := rom/cpc_mister_share_protocol.inc
+ROM_SRC := cpc_mister_share_rom.asm
+ROM_INC := cpc_mister_share_protocol.inc
 VERSION_INC := build/cpc_mister_share_version.inc
 ROM_OUT ?= build/boot.eXX
 GIT_VERSION ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo unknown)
@@ -18,7 +18,7 @@ $(VERSION_INC): force-version
 
 $(ROM_OUT): $(ROM_SRC) $(ROM_INC) $(VERSION_INC) Makefile
 	@mkdir -p "$(@D)"
-	cd "$(dir $(ROM_SRC))" && "$(ASM)" "$(notdir $(ROM_SRC))" "$(abspath $(ROM_OUT))"
+	"$(ASM)" "$(ROM_SRC)" "$(abspath $(ROM_OUT))"
 	@size=$$(wc -c < "$@"); \
 	if [ "$$size" -ne 16384 ]; then \
 		echo "error: expected 16384-byte ROM, got $$size bytes: $@"; \
