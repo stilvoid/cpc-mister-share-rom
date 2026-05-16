@@ -64,6 +64,8 @@ M4S_DISKWRITE_HEADER equ &9812           ; 16-bit AMSDOS output header pointer.
 M4S_DISKWRITE_TYPE equ &9814             ; AMSDOS output file type.
 M4S_DISKWRITE_LOAD equ &9815             ; 16-bit AMSDOS output load address.
 M4S_DISKWRITE_ENTRY equ &9817            ; 16-bit AMSDOS output entry address.
+M4S_DISKWRITE_LOGICAL equ &9819          ; 16-bit AMSDOS output logical length.
+M4S_DISKWRITE_COUNT equ &981B            ; 16-bit current host payload count.
 
         org KL_ROM_BASE
 
@@ -1353,16 +1355,27 @@ rsx_diskwrite_nonempty:
         inc hl
         ld d, (hl)
         ex de, hl                        ; HL = disk filename data.
+        ld de, 0                         ; DE = shared source file offset.
+        call diskwrite_request_chunk
+        jp nc, rsx_diskwrite_error
+
         ld de, M4S_DISC_BUFFER
         push ix
         call CAS_OUT_OPEN
         pop ix
         jp nc, rsx_diskwrite_error
         ld (M4S_DISKWRITE_HEADER), hl
-
+        call diskwrite_update_header
         ld de, 0                         ; DE = shared source file offset.
+        ld bc, (M4S_DISKWRITE_COUNT)
+        jp rsx_diskwrite_count_valid
 
 rsx_diskwrite_chunk:
+        call diskwrite_request_chunk
+        jp nc, rsx_diskwrite_close_error
+        jp rsx_diskwrite_count_valid
+
+diskwrite_request_chunk:
         call m4diskwrite_send_request
 
         ld a, M4S_CMD_TYPE
@@ -1370,32 +1383,48 @@ rsx_diskwrite_chunk:
         out (c), a
 
         call m4load_read_byte
-        jp nc, rsx_diskwrite_close_error
+        jp nc, diskwrite_request_failed
         ld c, a
         call m4load_read_byte
-        jp nc, rsx_diskwrite_close_error
+        jp nc, diskwrite_request_failed
         ld b, a                          ; BC = returned byte count.
+        ld (M4S_DISKWRITE_COUNT), bc
+
+        call m4load_read_byte            ; Read AMSDOS logical length low byte.
+        jp nc, diskwrite_request_failed
+        ld l, a
+        call m4load_read_byte            ; Read AMSDOS logical length high byte.
+        jp nc, diskwrite_request_failed
+        ld h, a
+        ld (M4S_DISKWRITE_LOGICAL), hl
 
         call m4load_read_byte            ; Read AMSDOS load address low byte.
-        jp nc, rsx_diskwrite_close_error
+        jp nc, diskwrite_request_failed
         ld l, a
         call m4load_read_byte            ; Read AMSDOS load address high byte.
-        jp nc, rsx_diskwrite_close_error
+        jp nc, diskwrite_request_failed
         ld h, a
         ld (M4S_DISKWRITE_LOAD), hl
 
         call m4load_read_byte            ; Read AMSDOS entry address low byte.
-        jp nc, rsx_diskwrite_close_error
+        jp nc, diskwrite_request_failed
         ld l, a
         call m4load_read_byte            ; Read AMSDOS entry address high byte.
-        jp nc, rsx_diskwrite_close_error
+        jp nc, diskwrite_request_failed
         ld h, a
         ld (M4S_DISKWRITE_ENTRY), hl
 
         call m4load_read_byte            ; Read AMSDOS type byte.
-        jp nc, rsx_diskwrite_close_error
+        jp nc, diskwrite_request_failed
         ld (M4S_DISKWRITE_TYPE), a
+        scf
+        ret
 
+diskwrite_request_failed:
+        or a
+        ret
+
+rsx_diskwrite_count_valid:
         ld a, b
         cp 3
         jp nc, rsx_diskwrite_close_error ; Refuse counts above 512 bytes.
@@ -1405,7 +1434,6 @@ rsx_diskwrite_chunk:
         or a
         jp nz, rsx_diskwrite_close_error
 
-rsx_diskwrite_count_valid:
         ld a, b
         or c
         jp z, rsx_diskwrite_close_done
@@ -1446,7 +1474,6 @@ rsx_diskwrite_char_ok:
 
 rsx_diskwrite_close_done:
         ld (M4S_IMPORT_DONE), de
-        call diskwrite_update_header
         push ix
         call CAS_OUT_CLOSE
         pop ix
@@ -1486,7 +1513,7 @@ diskwrite_update_header:
         ld (hl), d
         inc hl
         inc hl                            ; Logical length at header+24.
-        ld de, (M4S_IMPORT_DONE)
+        ld de, (M4S_DISKWRITE_LOGICAL)
         ld (hl), e
         inc hl
         ld (hl), d
@@ -1498,7 +1525,7 @@ diskwrite_update_header:
         ld hl, (M4S_DISKWRITE_HEADER)
         ld de, 64
         add hl, de
-        ld de, (M4S_IMPORT_DONE)
+        ld de, (M4S_DISKWRITE_LOGICAL)
         ld (hl), e                        ; Real length low.
         inc hl
         ld (hl), d                        ; Real length middle.
@@ -1508,7 +1535,7 @@ diskwrite_update_header:
         ld hl, (M4S_DISKWRITE_HEADER)
         ld de, 24
         add hl, de
-        ld de, (M4S_IMPORT_DONE)
+        ld de, (M4S_DISKWRITE_LOGICAL)
         ld (hl), e                        ; Logical length low.
         inc hl
         ld (hl), d                        ; Logical length high.
@@ -2256,7 +2283,7 @@ m4loadh_send_name:
         pop hl
         ret
 
-; Send request "H:OOOO:filename" using the shared source descriptor at IX+2.
+; Send request "O:OOOO:filename" using the shared source descriptor at IX+2.
 m4diskwrite_send_request:
         push hl
         push de
@@ -2266,7 +2293,7 @@ m4diskwrite_send_request:
         out (c), a
 
         ld bc, M4S_PORT_DATA
-        ld a, "H"
+        ld a, "O"
         out (c), a
         ld a, ":"
         out (c), a
