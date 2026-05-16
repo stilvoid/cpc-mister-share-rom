@@ -1428,14 +1428,11 @@ diskwrite_request_chunk:
         call m4load_read_byte            ; Read AMSDOS type byte.
         jp nc, diskwrite_request_failed
         ld (M4S_DISKWRITE_TYPE), a
-        ld hl, M4S_IMPORT_HEADER
         ld b, 128
 
 diskwrite_read_header_loop:
         call m4load_read_byte
         jp nc, diskwrite_request_failed
-        ld (hl), a
-        inc hl
         djnz diskwrite_read_header_loop
         ld bc, (M4S_DISKWRITE_COUNT)
         scf
@@ -1519,10 +1516,31 @@ diskwrite_update_header:
         push bc
         push af
         ld hl, (M4S_DISKWRITE_HEADER)
-        ld de, M4S_IMPORT_HEADER
-        ex de, hl
-        ld bc, 69
-        ldir
+        ld de, 18
+        add hl, de
+        ld a, (M4S_DISKWRITE_TYPE)
+        ld (hl), a
+        inc hl
+        xor a
+        ld (hl), a                        ; Data length low.
+        inc hl
+        ld (hl), a                        ; Data length high.
+        inc hl
+        ld de, (M4S_DISKWRITE_LOAD)
+        ld (hl), e
+        inc hl
+        ld (hl), d
+        inc hl
+        inc hl                            ; Logical length at header+24.
+        ld de, (M4S_DISKWRITE_LOGICAL)
+        ld (hl), e
+        inc hl
+        ld (hl), d
+        inc hl
+        ld bc, (M4S_DISKWRITE_ENTRY)
+        ld (hl), c
+        inc hl
+        ld (hl), b
         ld hl, (M4S_DISKWRITE_HEADER)
         ld de, 64
         add hl, de
