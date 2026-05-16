@@ -1537,12 +1537,11 @@ diskwrite_update_header:
         ld hl, (M4S_DISKWRITE_HEADER)
         ld de, 64
         add hl, de
-        ld de, (M4S_DISKWRITE_LOGICAL)
-        ld (hl), e                        ; Real length low.
-        inc hl
-        ld (hl), d                        ; Real length middle.
-        inc hl
         xor a
+        ld (hl), a                        ; Real length low, maintained by AMSDOS.
+        inc hl
+        ld (hl), a                        ; Real length middle.
+        inc hl
         ld (hl), a                        ; Real length high.
         ld hl, (M4S_DISKWRITE_HEADER)
         ld de, 24
