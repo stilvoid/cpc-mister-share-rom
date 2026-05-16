@@ -9,8 +9,11 @@ ROM, Amstrad core, and Main_MiSTer binary are installed.
 2. Confirm the boot screen includes:
 
 ```text
- CPC MiSTer Share 4.14 installed
+ CPC MiSTer Share v0.1 installed
 ```
+
+The exact version is generated from git at build time, so tester builds may
+include a suffix such as `-dirty` or `-1-gabcdef`.
 
 3. Run:
 

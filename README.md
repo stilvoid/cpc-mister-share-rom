@@ -10,8 +10,12 @@ currently mounted AMSDOS disk.
 The current ROM identifies itself as:
 
 ```text
- CPC MiSTer Share 4.14 installed
+ CPC MiSTer Share v0.1 installed
 ```
+
+The version string is generated at build time with
+`git describe --tags --dirty --always`, so local builds may show a suffix such
+as `-dirty` or `-1-gabcdef`.
 
 ## Requirements
 
@@ -184,7 +188,7 @@ diagnostics such as AMSDOS open/header/done/remaining counters.
 
 ## Tester Checklist
 
-1. Boot the modified core and confirm the stage 4.14 sign-on appears.
+1. Boot the modified core and confirm the CPC MiSTer Share sign-on appears.
 2. Run `|about` and confirm the command list is readable.
 3. Create files in `shared`, then run `|ls`, `|cd`, and `|pwd`.
 4. Try `|type`, `|hexdump`, and `|stat` on text, binary, headered, and

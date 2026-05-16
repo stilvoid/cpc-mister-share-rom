@@ -2896,10 +2896,14 @@ print_progress_newline:
         ret
 
 msg_intro:
-        db " CPC MiSTer Share 4.14 installed", 13, 10, 13, 10, 0
+        db " CPC MiSTer Share "
+        include "../build/cpc_mister_share_version.inc"
+        db " installed", 13, 10, 13, 10, 0
 
 msg_about:
-        db "CPC MiSTer Share 4.14", 13, 10
+        db "CPC MiSTer Share "
+        include "../build/cpc_mister_share_version.inc"
+        db 13, 10
         db "|about", 13, 10
         db "|cd[,", 34, "DIR", 34, "]", 13, 10
         db "|cp,", 34, "SRC", 34, ",", 34, "DST", 34, 13, 10

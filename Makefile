@@ -2,7 +2,9 @@ ASM ?= pasmo
 
 ROM_SRC := rom/cpc_mister_share_rom.asm
 ROM_INC := rom/cpc_mister_share_protocol.inc
+VERSION_INC := build/cpc_mister_share_version.inc
 ROM_OUT ?= build/boot.eXX
+GIT_VERSION ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo unknown)
 CORE_DIR ?= ../Amstrad_MiSTer
 MAIN_DIR ?= ../Main_MiSTer
 
@@ -64,11 +66,17 @@ EC2_INSTANCE_ID ?= i-0b7b18909edecdb55
 AWS_REGION ?= eu-west-2
 AWS ?= aws
 
-.PHONY: all clean install install-main main main-clean remote-sync remote-sync-core remote-build remote-build-core remote-fetch remote-fetch-core remote-core remote-start-ec2 remote-stop-ec2
+.PHONY: all clean force-version install install-main main main-clean remote-sync remote-sync-core remote-build remote-build-core remote-fetch remote-fetch-core remote-core remote-start-ec2 remote-stop-ec2
 
 all: $(ROM_OUT) $(CORE_RBF) $(MAIN_BIN)
 
-$(ROM_OUT): $(ROM_SRC) $(ROM_INC) Makefile
+$(VERSION_INC): force-version
+	@mkdir -p "$(@D)"
+	@tmp="$@.tmp"; \
+	printf '        db "%s"\n' "$(GIT_VERSION)" > "$$tmp"; \
+	if ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm "$$tmp"; fi
+
+$(ROM_OUT): $(ROM_SRC) $(ROM_INC) $(VERSION_INC) Makefile
 	@mkdir -p "$(@D)"
 	cd "$(dir $(ROM_SRC))" && "$(ASM)" "$(notdir $(ROM_SRC))" "$(abspath $(ROM_OUT))"
 	@size=$$(wc -c < "$@"); \
