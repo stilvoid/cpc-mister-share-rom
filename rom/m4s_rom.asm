@@ -14,6 +14,7 @@
 ;     |diskread,"DISCFILE"
 ;     |diskread,"DISCFILE","shared/path"
 ;     |diskread,"DISCFILE","shared/path",0
+;     |diskwrite,"shared/path"
 ;     |diskwrite,"shared/path","DISCFILE"
 ;     |exec,"FILE.BIN"
 ;     |hexdump,"FILE.BIN"
@@ -1381,22 +1382,39 @@ rsx_import_create_error:
         ret
 
 ; ---------------------------------------------------------------------------
-; |diskwrite,"shared/path","discfile" RSX implementation.
+; |diskwrite,"shared/path"[,"discfile"] RSX implementation.
 ;
 ; Streams a shared-folder file to the currently selected AMSDOS disk.  This first
 ; pass writes raw bytes through CAS_OUT_CHAR; AMSDOS header handling can be added
 ; once the byte stream path is proven on real hardware.
 ; ---------------------------------------------------------------------------
 rsx_diskwrite:
+        cp 1
+        jr z, rsx_diskwrite_one_param
         cp 2
-        jr z, rsx_diskwrite_have_params
+        jr z, rsx_diskwrite_two_params
         ld hl, msg_diskwrite_usage
         call print_string
         ret
 
-rsx_diskwrite_have_params:
+rsx_diskwrite_one_param:
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = shared source descriptor.
+        ld (M4S_IMPORT_SRC_DESC), hl
+        ld hl, 0                         ; Derive disk name from source leaf.
+        ld (M4S_IMPORT_DST_DESC), hl
+        jr rsx_diskwrite_have_params
+
+rsx_diskwrite_two_params:
         ld l, (ix+2)
         ld h, (ix+3)                     ; HL = shared source descriptor.
+        ld (M4S_IMPORT_SRC_DESC), hl
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = disk destination descriptor.
+        ld (M4S_IMPORT_DST_DESC), hl
+
+rsx_diskwrite_have_params:
+        ld hl, (M4S_IMPORT_SRC_DESC)
         ld a, (hl)
         or a
         jr nz, rsx_diskwrite_source_nonempty
@@ -1405,8 +1423,10 @@ rsx_diskwrite_have_params:
         ret
 
 rsx_diskwrite_source_nonempty:
-        ld l, (ix+0)
-        ld h, (ix+1)                     ; HL = disk destination descriptor.
+        ld hl, (M4S_IMPORT_DST_DESC)
+        ld a, h
+        or l
+        jr z, rsx_diskwrite_nonempty
         ld a, (hl)
         or a
         jr nz, rsx_diskwrite_nonempty
@@ -1423,14 +1443,8 @@ rsx_diskwrite_nonempty:
         call diskwrite_request_chunk
         jp nc, rsx_diskwrite_error
 
-        ld l, (ix+0)
-        ld h, (ix+1)                     ; HL = disk destination descriptor.
-        ld b, (hl)                       ; B = disk filename length.
-        inc hl
-        ld e, (hl)
-        inc hl
-        ld d, (hl)
-        ex de, hl                        ; HL = disk filename data.
+        call diskwrite_prepare_output_name
+        jp nc, rsx_diskwrite_error
         ld de, M4S_DISC_BUFFER
         push ix
         call CAS_OUT_OPEN
@@ -2423,7 +2437,7 @@ m4exec_check_name:
         pop hl
         ret
 
-; Send request "O:OOOO:filename" using the shared source descriptor at IX+2.
+; Send request "O:OOOO:filename" using the saved shared source descriptor.
 m4diskwrite_send_request:
         push hl
         push de
@@ -2445,8 +2459,7 @@ m4diskwrite_send_request:
         ld bc, M4S_PORT_DATA
         out (c), a
 
-        ld l, (ix+2)
-        ld h, (ix+3)                     ; HL = shared source descriptor.
+        ld hl, (M4S_IMPORT_SRC_DESC)      ; HL = shared source descriptor.
         ld b, (hl)                       ; B = filename length.
         inc hl
         ld e, (hl)
@@ -2468,6 +2481,62 @@ m4diskwrite_send_name:
 
         pop de
         pop hl
+        ret
+
+diskwrite_prepare_output_name:
+        ld hl, (M4S_IMPORT_DST_DESC)
+        ld a, h
+        or l
+        jr z, diskwrite_source_leaf_name
+        ld b, (hl)                       ; B = disk filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        ex de, hl                        ; HL = disk filename data.
+        scf
+        ret
+
+diskwrite_source_leaf_name:
+        ld hl, (M4S_IMPORT_SRC_DESC)
+        ld b, (hl)                       ; B = full source path length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = source path data.
+        ld h, d
+        ld l, e                          ; HL = current leaf pointer.
+        ld c, b                          ; C = current leaf length.
+
+diskwrite_leaf_scan:
+        ld a, b
+        or a
+        jr z, diskwrite_leaf_ready
+        ld a, (de)
+        inc de
+        dec b
+        cp "/"
+        jr z, diskwrite_leaf_reset
+        cp &5C
+        jr z, diskwrite_leaf_reset
+        jr diskwrite_leaf_scan
+
+diskwrite_leaf_reset:
+        ld h, d
+        ld l, e
+        ld c, b
+        jr diskwrite_leaf_scan
+
+diskwrite_leaf_ready:
+        ld a, c
+        or a
+        jr z, diskwrite_leaf_failed
+        ld b, c
+        scf
+        ret
+
+diskwrite_leaf_failed:
+        or a
         ret
 
 ; Send request "S:OOOO:NN:filename:HEX", where OOOO is the 16-bit file offset
@@ -2836,7 +2905,7 @@ msg_about:
         db "|cp,", 34, "SRC", 34, ",", 34, "DST", 34, 13, 10
         db "|debug[,0|1]", 13, 10
         db "|diskread,", 34, "DISC", 34, "[,", 34, "SHARED", 34, "[,0]]", 13, 10
-        db "|diskwrite,", 34, "SHARED", 34, ",", 34, "DISC", 34, 13, 10
+        db "|diskwrite,", 34, "SHARED", 34, "[,", 34, "DISC", 34, "]", 13, 10
         db "|exec,", 34, "FILE", 34, 13, 10
         db "|hexdump,", 34, "FILE", 34, 13, 10
         db "|loadm,", 34, "FILE", 34, "[,&ADDR]", 13, 10
@@ -2919,7 +2988,7 @@ msg_import_error:
         db "Disk read failed", 13, 10, 0
 
 msg_diskwrite_usage:
-        db "Usage: |diskwrite,", 34, "SHARED", 34, ",", 34, "DISC", 34, 13, 10, 0
+        db "Usage: |diskwrite,", 34, "SHARED", 34, "[,", 34, "DISC", 34, "]", 13, 10, 0
 
 msg_diskwrite_done:
         db "Disk write OK", 13, 10, 0

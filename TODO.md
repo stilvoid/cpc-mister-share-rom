@@ -8,10 +8,6 @@
     ls, cd, pwd, type, hexdump, stat, loadm, savem, exec, mkdir, mv, cp, rm,
     diskread, and diskwrite.
 
-* Consider making the second parameter of |DISKWRITE optional.
-    Use the shared source filename as the disk filename where this is
-    unambiguous. For paths, use the final path component.
-
 * Expand debug mode as needed.
     |debug[,0|1] now controls diskread's OPEN/HDR/DONE/REM diagnostics. Add
     more request/response diagnostics only where they help diagnose real issues.
