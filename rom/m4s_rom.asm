@@ -1349,16 +1349,18 @@ rsx_diskwrite_source_nonempty:
         ret
 
 rsx_diskwrite_nonempty:
+        ld de, 0                         ; DE = shared source file offset.
+        call diskwrite_request_chunk
+        jp nc, rsx_diskwrite_error
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = disk destination descriptor.
         ld b, (hl)                       ; B = disk filename length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)
         ex de, hl                        ; HL = disk filename data.
-        ld de, 0                         ; DE = shared source file offset.
-        call diskwrite_request_chunk
-        jp nc, rsx_diskwrite_error
-
         ld de, M4S_DISC_BUFFER
         push ix
         call CAS_OUT_OPEN
