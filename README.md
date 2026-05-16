@@ -124,8 +124,8 @@ Run `|about` on the CPC for the ROM's built-in command summary.
 - `|loadm,"FILE"` loads raw bytes to `&4000`.
 - `|loadm,"FILE",&ADDR` loads raw bytes to an explicit address.
 - `|savem,"FILE",&ADDR,&LEN` saves a memory range to the shared folder.
-- `|exec,"FILE"` reads an AMSDOS header, prompts, loads, and jumps or prepares
-  a BASIC file for `RUN`.
+- `|exec,"FILE"` reads an AMSDOS header, loads a binary and jumps to its entry,
+  or prepares a BASIC file for `RUN`.
 - `|mkdir,"DIR"` creates a shared directory.
 - `|mv,"OLD","NEW"` renames a shared file or directory.
 - `|cp,"SRC","DST"` copies within the shared folder.

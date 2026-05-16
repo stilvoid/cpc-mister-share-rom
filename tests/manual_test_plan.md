@@ -148,11 +148,10 @@ Then test a known-good AMSDOS binary:
 
 Expected:
 
-- File metadata is printed.
-- The command asks `Load and CALL entry? Y/N`.
-- `N` cancels cleanly.
-- `Y` loads and runs the program, or for a BASIC file prints that you should
-  type `RUN`.
+- Binary files load and run without an extra prompt.
+- BASIC files load and print that you should type `RUN`.
+- Headerless files, unsupported file types, or binary files without an entry
+  address report `Load failed`.
 
 ## 8. Disk Read
 

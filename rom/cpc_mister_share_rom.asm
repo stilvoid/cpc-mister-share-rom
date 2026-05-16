@@ -2098,8 +2098,8 @@ rsx_loadm_error:
 ; ---------------------------------------------------------------------------
 ; |exec,"filename" RSX implementation.
 ;
-; Reads AMSDOS metadata, prompts the user, loads the payload at the AMSDOS load
-; address, and jumps to the AMSDOS entry address.  This is deliberately separate
+; Reads AMSDOS metadata, loads the payload at the AMSDOS load address, and jumps
+; to the AMSDOS entry address for binary files. This is deliberately separate
 ; from loadm because it may write to low memory.
 ; ---------------------------------------------------------------------------
 rsx_exec:
@@ -2129,22 +2129,6 @@ rsx_exec_nonempty:
         cp 1
         jp nz, rsx_loadm_error
 
-        push ix
-        call rsx_stat_have_param
-        ld hl, msg_loadh_prompt
-        call print_string
-        call KM_WAIT_CHAR
-        cp "Y"
-        jr z, rsx_exec_confirmed
-        cp "y"
-        jr z, rsx_exec_confirmed
-        pop ix
-        ld hl, msg_loadh_cancelled
-        call print_string
-        ret
-
-rsx_exec_confirmed:
-        pop ix
         ld hl, 0                         ; HL = destination pointer, filled
                                          ; from the first response header.
         ld de, 0                         ; DE = file offset for next chunk.
@@ -2240,12 +2224,12 @@ rsx_exec_done:
         cp &01                           ; Protected BASIC: load only too.
         jp z, rsx_exec_basic_done
         cp &02                           ; Binary: jump if an entry exists.
-        jp nz, rsx_loadm_done
+        jp nz, rsx_loadm_error
         push iy
         pop hl
         ld a, h
         or l
-        jp z, rsx_loadm_done
+        jp z, rsx_loadm_error
         jp (hl)
 
 rsx_exec_basic_done:
@@ -3015,12 +2999,6 @@ msg_save_error:
 
 msg_loadh_usage:
         db "Usage: |exec,", 34, "FILE.BIN", 34, 13, 10, 0
-
-msg_loadh_prompt:
-        db "Load and CALL entry? Y/N ", 0
-
-msg_loadh_cancelled:
-        db 13, 10, "Cancelled", 13, 10, 0
 
 msg_loadh_basic_done:
         db 13, 10, "Loaded BASIC - type RUN", 13, 10, 0
