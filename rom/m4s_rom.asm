@@ -4,34 +4,29 @@
 ; This is a deliberately small Amstrad CPC background expansion ROM.  It
 ; registers RSX commands with the CPC firmware:
 ;
-;     |HELLO
-;     |ls
-;     |ls,"DIR"
+;     |about
 ;     |cd
 ;     |cd,"DIR"
-;     |pwd
-;     |type,"FILE.TXT"
-;     |hexdump,"FILE.BIN"
-;     |stat,"FILE.BIN"
-;     |loadm,"FILE.BIN",&8000
-;     |savem,"FILE.BIN",&4000,&0100
-;     |exec,"FILE.BIN"
-;     |mkdir,"DIR"
-;     |mv,"OLD","NEW"
 ;     |cp,"SRC","DST"
-;     |rm,"FILE"
+;     |debug
+;     |debug,0
+;     |debug,1
 ;     |diskread,"DISCFILE"
 ;     |diskread,"DISCFILE","shared/path"
 ;     |diskread,"DISCFILE","shared/path",0
 ;     |diskwrite,"shared/path","DISCFILE"
-;     |about
-;     |debug
-;     |debug,0
-;     |debug,1
-;
-; Running |HELLO prints:
-;
-;     M4S ROM OK
+;     |exec,"FILE.BIN"
+;     |hexdump,"FILE.BIN"
+;     |loadm,"FILE.BIN",&8000
+;     |ls
+;     |ls,"DIR"
+;     |mkdir,"DIR"
+;     |mv,"OLD","NEW"
+;     |pwd
+;     |rm,"FILE"
+;     |savem,"FILE.BIN",&4000,&0100
+;     |stat,"FILE.BIN"
+;     |type,"FILE.TXT"
 ;
 ; Running |ls reads a directory text stream from the experimental FPGA
 ; mailbox ports.
@@ -99,24 +94,23 @@ rom_prefix:
         dw command_names                 ; External command name table.
 
         jp rom_init                      ; Entry 0: firmware power-up entry.
-        jp rsx_hello                     ; Entry 1: BASIC command |HELLO.
-        jp rsx_m4dir                     ; Entry 2: BASIC command |ls.
-        jp rsx_m4cd                      ; Entry 3: BASIC command |cd.
-        jp rsx_pwd                       ; Entry 4: BASIC command |pwd.
-        jp rsx_m4type                    ; Entry 5: BASIC command |type.
-        jp rsx_m4dump                    ; Entry 6: BASIC command |hexdump.
-        jp rsx_m4info                    ; Entry 7: BASIC command |stat.
-        jp rsx_m4load                    ; Entry 8: BASIC command |loadm.
-        jp rsx_m4save                    ; Entry 9: BASIC command |savem.
-        jp rsx_m4loadh                   ; Entry 10: BASIC command |exec.
-        jp rsx_mkdir                     ; Entry 11: BASIC command |mkdir.
-        jp rsx_mv                        ; Entry 12: BASIC command |mv.
-        jp rsx_cp                        ; Entry 13: BASIC command |cp.
-        jp rsx_rm                        ; Entry 14: BASIC command |rm.
-        jp rsx_diskread                  ; Entry 15: BASIC command |diskread.
-        jp rsx_diskwrite                 ; Entry 16: BASIC command |diskwrite.
-        jp rsx_about                     ; Entry 17: BASIC command |about.
-        jp rsx_debug                     ; Entry 18: BASIC command |debug.
+        jp rsx_m4dir                     ; Entry 1: BASIC command |ls.
+        jp rsx_m4cd                      ; Entry 2: BASIC command |cd.
+        jp rsx_pwd                       ; Entry 3: BASIC command |pwd.
+        jp rsx_m4type                    ; Entry 4: BASIC command |type.
+        jp rsx_m4dump                    ; Entry 5: BASIC command |hexdump.
+        jp rsx_m4info                    ; Entry 6: BASIC command |stat.
+        jp rsx_m4load                    ; Entry 7: BASIC command |loadm.
+        jp rsx_m4save                    ; Entry 8: BASIC command |savem.
+        jp rsx_m4loadh                   ; Entry 9: BASIC command |exec.
+        jp rsx_mkdir                     ; Entry 10: BASIC command |mkdir.
+        jp rsx_mv                        ; Entry 11: BASIC command |mv.
+        jp rsx_cp                        ; Entry 12: BASIC command |cp.
+        jp rsx_rm                        ; Entry 13: BASIC command |rm.
+        jp rsx_diskread                  ; Entry 14: BASIC command |diskread.
+        jp rsx_diskwrite                 ; Entry 15: BASIC command |diskwrite.
+        jp rsx_about                     ; Entry 16: BASIC command |about.
+        jp rsx_debug                     ; Entry 17: BASIC command |debug.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -130,24 +124,23 @@ rom_prefix:
 ; ---------------------------------------------------------------------------
 command_names:
         db "M4S BOO", &D4                ; Entry 0: rom_init ("T" + bit 7).
-        db "HELL", &CF                   ; Entry 1: rsx_hello ("O" + bit 7).
-        db "L", &D3                      ; Entry 2: rsx_m4dir ("S" + bit 7).
-        db "C", &C4                      ; Entry 3: rsx_m4cd ("D" + bit 7).
-        db "PW", &C4                     ; Entry 4: rsx_pwd ("D" + bit 7).
-        db "TYP", &C5                    ; Entry 5: rsx_m4type ("E" + bit 7).
-        db "HEXDUM", &D0                 ; Entry 6: rsx_m4dump ("P" + bit 7).
-        db "STA", &D4                    ; Entry 7: rsx_m4info ("T" + bit 7).
-        db "LOAD", &CD                   ; Entry 8: rsx_m4load ("M" + bit 7).
-        db "SAVE", &CD                   ; Entry 9: rsx_m4save ("M" + bit 7).
-        db "EXE", &C3                    ; Entry 10: rsx_m4loadh ("C" + bit 7).
-        db "MKDI", &D2                   ; Entry 11: rsx_mkdir ("R" + bit 7).
-        db "M", &D6                      ; Entry 12: rsx_mv ("V" + bit 7).
-        db "C", &D0                      ; Entry 13: rsx_cp ("P" + bit 7).
-        db "R", &CD                      ; Entry 14: rsx_rm ("M" + bit 7).
-        db "DISKREA", &C4                ; Entry 15: rsx_diskread ("D" + bit 7).
-        db "DISKWRIT", &C5               ; Entry 16: rsx_diskwrite ("E" + bit 7).
-        db "ABOU", &D4                   ; Entry 17: rsx_about ("T" + bit 7).
-        db "DEBU", &C7                   ; Entry 18: rsx_debug ("G" + bit 7).
+        db "L", &D3                      ; Entry 1: rsx_m4dir ("S" + bit 7).
+        db "C", &C4                      ; Entry 2: rsx_m4cd ("D" + bit 7).
+        db "PW", &C4                     ; Entry 3: rsx_pwd ("D" + bit 7).
+        db "TYP", &C5                    ; Entry 4: rsx_m4type ("E" + bit 7).
+        db "HEXDUM", &D0                 ; Entry 5: rsx_m4dump ("P" + bit 7).
+        db "STA", &D4                    ; Entry 6: rsx_m4info ("T" + bit 7).
+        db "LOAD", &CD                   ; Entry 7: rsx_m4load ("M" + bit 7).
+        db "SAVE", &CD                   ; Entry 8: rsx_m4save ("M" + bit 7).
+        db "EXE", &C3                    ; Entry 9: rsx_m4loadh ("C" + bit 7).
+        db "MKDI", &D2                   ; Entry 10: rsx_mkdir ("R" + bit 7).
+        db "M", &D6                      ; Entry 11: rsx_mv ("V" + bit 7).
+        db "C", &D0                      ; Entry 12: rsx_cp ("P" + bit 7).
+        db "R", &CD                      ; Entry 13: rsx_rm ("M" + bit 7).
+        db "DISKREA", &C4                ; Entry 14: rsx_diskread ("D" + bit 7).
+        db "DISKWRIT", &C5               ; Entry 15: rsx_diskwrite ("E" + bit 7).
+        db "ABOU", &D4                   ; Entry 16: rsx_about ("T" + bit 7).
+        db "DEBU", &C7                   ; Entry 17: rsx_debug ("G" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -174,22 +167,6 @@ rom_init:
         pop hl
         pop de
         scf
-        ret
-
-; ---------------------------------------------------------------------------
-; |HELLO RSX implementation.
-;
-; BASIC enters external commands with:
-;   A  = parameter count
-;   IX = parameter block
-;   IY = ROM upper workspace address for background ROM commands
-;
-; |HELLO takes no parameters, so all of those registers can be ignored.  External
-; command routines may corrupt AF, BC, DE, HL, IX and IY on exit.
-; ---------------------------------------------------------------------------
-rsx_hello:
-        ld hl, msg_hello
-        call print_string
         ret
 
 ; ---------------------------------------------------------------------------
@@ -1125,6 +1102,8 @@ rsx_import_nonempty:
         call import_create_destination
         jp nc, rsx_import_create_error
 
+        ld hl, msg_reading
+        call print_progress_prefix
         ld de, 0                          ; DE = shared destination file offset.
         push de
         push ix
@@ -1383,6 +1362,7 @@ rsx_import_close_error:
         push ix
         call CAS_IN_CLOSE
         pop ix
+        call print_progress_newline
 
 rsx_import_error:
         ld hl, msg_import_error
@@ -1451,6 +1431,10 @@ rsx_diskwrite_nonempty:
         call CAS_OUT_OPEN
         pop ix
         jp nc, rsx_diskwrite_error
+        push hl
+        ld hl, msg_writing
+        call print_progress_prefix
+        pop hl
         ld (M4S_DISKWRITE_HEADER), hl
         call diskwrite_update_header
         ld de, 0                         ; DE = shared source file offset.
@@ -1582,6 +1566,7 @@ rsx_diskwrite_close_error:
         push ix
         call CAS_OUT_CLOSE
         pop ix
+        call print_progress_newline
 
 rsx_diskwrite_error:
         ld hl, msg_diskwrite_error
@@ -2632,6 +2617,15 @@ print_hex_digit:
         call TXT_OUTPUT
         ret
 
+print_progress_prefix:
+        ld a, (M4S_DEBUG_MODE)
+        or a
+        ret nz
+        ld a, 1
+        ld (M4S_PROGRESS_SEEN), a
+        call print_string
+        ret
+
 print_progress_dot:
         ld a, (M4S_DEBUG_MODE)
         or a
@@ -2666,29 +2660,34 @@ print_progress_newline:
         call print_string
         ret
 
-msg_hello:
-        db "M4S ROM OK", 13, 10, 0
-
 msg_intro:
         db " M4S ROM Stage 4.14 installed", 13, 10, 13, 10, 0
 
 msg_about:
         db "M4S ROM Stage 4.14", 13, 10
-        db "|ls[,", 34, "DIR", 34, "]", 13, 10
-        db "|cd[,", 34, "DIR", 34, "]  |pwd", 13, 10
-        db "|type,", 34, "FILE", 34, 13, 10
-        db "|hexdump,", 34, "FILE", 34, 13, 10
-        db "|stat,", 34, "FILE", 34, 13, 10
-        db "|loadm,", 34, "FILE", 34, "[,&ADDR]", 13, 10
-        db "|savem,", 34, "FILE", 34, ",&ADDR,&LEN", 13, 10
-        db "|exec,", 34, "FILE", 34, 13, 10
-        db "|mkdir,", 34, "DIR", 34, 13, 10
-        db "|mv,", 34, "OLD", 34, ",", 34, "NEW", 34, 13, 10
+        db "|about", 13, 10
+        db "|cd[,", 34, "DIR", 34, "]", 13, 10
         db "|cp,", 34, "SRC", 34, ",", 34, "DST", 34, 13, 10
-        db "|rm,", 34, "FILE", 34, 13, 10
+        db "|debug[,0|1]", 13, 10
         db "|diskread,", 34, "DISC", 34, "[,", 34, "SHARED", 34, "[,0]]", 13, 10
         db "|diskwrite,", 34, "SHARED", 34, ",", 34, "DISC", 34, 13, 10
-        db "|debug[,0|1]  |about", 13, 10, 0
+        db "|exec,", 34, "FILE", 34, 13, 10
+        db "|hexdump,", 34, "FILE", 34, 13, 10
+        db "|loadm,", 34, "FILE", 34, "[,&ADDR]", 13, 10
+        db "|ls[,", 34, "DIR", 34, "]", 13, 10
+        db "|mkdir,", 34, "DIR", 34, 13, 10
+        db "|mv,", 34, "OLD", 34, ",", 34, "NEW", 34, 13, 10
+        db "|pwd", 13, 10
+        db "|rm,", 34, "FILE", 34, 13, 10
+        db "|savem,", 34, "FILE", 34, ",&ADDR,&LEN", 13, 10
+        db "|stat,", 34, "FILE", 34, 13, 10
+        db "|type,", 34, "FILE", 34, 13, 10, 0
+
+msg_reading:
+        db "Reading: ", 0
+
+msg_writing:
+        db "Writing: ", 0
 
 msg_debug_usage:
         db "Usage: |debug[,0|1]", 13, 10, 0
