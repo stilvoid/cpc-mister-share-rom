@@ -20,6 +20,7 @@
 ;     |mv,"OLD","NEW"
 ;     |cp,"SRC","DST"
 ;     |rm,"FILE"
+;     |diskread,"DISCFILE"
 ;     |diskread,"DISCFILE","shared/path"
 ;     |diskread,"DISCFILE","shared/path",0
 ;     |diskwrite,"shared/path","DISCFILE"
@@ -968,13 +969,15 @@ rsx_rm_output:
         jr rsx_rm_loop
 
 ; ---------------------------------------------------------------------------
-; |diskread,"discfile","shared/path"[,preserve_header] RSX implementation.
+; |diskread,"discfile"[,"shared/path"[,preserve_header]] RSX implementation.
 ;
 ; Reads a file through AMSDOS from the currently selected CPC disk and writes it
 ; to the current shared folder.  The host refuses an existing destination, so an
 ; interrupted disk read is visible rather than silently replacing a good file.
 ; ---------------------------------------------------------------------------
 rsx_diskread:
+        cp 1
+        jr z, rsx_import_one_param
         cp 2
         jr z, rsx_import_two_params
         cp 3
@@ -982,6 +985,15 @@ rsx_diskread:
         ld hl, msg_import_usage
         call print_string
         ret
+
+rsx_import_one_param:
+        ld l, (ix+0)                     ; Disk filename is also shared path.
+        ld h, (ix+1)
+        ld (M4S_IMPORT_SRC_DESC), hl
+        ld (M4S_IMPORT_DST_DESC), hl
+        ld a, 1
+        ld (M4S_IMPORT_HEADER_MODE), a
+        jr rsx_import_have_params
 
 rsx_import_two_params:
         ld l, (ix+2)                     ; First BASIC arg: disk filename.
@@ -2542,7 +2554,7 @@ msg_rm_usage:
         db "Usage: |rm,", 34, "FILE", 34, 13, 10, 0
 
 msg_import_usage:
-        db "Usage: |diskread,", 34, "DISC", 34, ",", 34, "SHARED", 34, "[,0]", 13, 10, 0
+        db "Usage: |diskread,", 34, "DISC", 34, "[,", 34, "SHARED", 34, "[,0]]", 13, 10, 0
 
 msg_import_open_len:
         db "OPEN=", 0
