@@ -1505,6 +1505,13 @@ diskwrite_update_header:
         inc hl
         xor a
         ld (hl), a                        ; Real length high.
+        ld hl, (M4S_DISKWRITE_HEADER)
+        ld de, 24
+        add hl, de
+        ld de, (M4S_IMPORT_DONE)
+        ld (hl), e                        ; Logical length low.
+        inc hl
+        ld (hl), d                        ; Logical length high.
         call diskwrite_update_checksum
         pop af
         pop bc
