@@ -60,6 +60,10 @@ M4S_IMPORT_DST_DESC equ &980C            ; 16-bit diskread destination descripto
 M4S_IMPORT_HEADER_MODE equ &980E         ; Non-zero means prepend AMSDOS header.
 M4S_DISKWRITE_BYTE equ &9810             ; Byte currently being written to disk.
 M4S_DISKWRITE_STATUS equ &9811           ; Non-zero means CAS_OUT_CHAR failed.
+M4S_DISKWRITE_HEADER equ &9812           ; 16-bit AMSDOS output header pointer.
+M4S_DISKWRITE_TYPE equ &9814             ; AMSDOS output file type.
+M4S_DISKWRITE_LOAD equ &9815             ; 16-bit AMSDOS output load address.
+M4S_DISKWRITE_ENTRY equ &9817            ; 16-bit AMSDOS output entry address.
 
         org KL_ROM_BASE
 
@@ -1053,7 +1057,7 @@ rsx_import_nonempty:
         ld (M4S_IMPORT_FILEHEAD), hl       ; Hidden AMSDOS buffer control.
 
         call import_create_destination
-        jp nc, rsx_import_close_error
+        jp nc, rsx_import_create_error
 
         ld de, 0                          ; DE = shared destination file offset.
         push de
@@ -1302,6 +1306,12 @@ rsx_import_error:
         call print_string
         ret
 
+rsx_import_create_error:
+        push ix
+        call CAS_IN_CLOSE
+        pop ix
+        ret
+
 ; ---------------------------------------------------------------------------
 ; |diskwrite,"shared/path","discfile" RSX implementation.
 ;
@@ -1348,41 +1358,61 @@ rsx_diskwrite_nonempty:
         call CAS_OUT_OPEN
         pop ix
         jp nc, rsx_diskwrite_error
+        ld (M4S_DISKWRITE_HEADER), hl
 
         ld de, 0                         ; DE = shared source file offset.
 
 rsx_diskwrite_chunk:
-        ld iy, 1                         ; m4load_send_request uses IX+2.
-        call m4load_send_request
+        call m4diskwrite_send_request
 
         ld a, M4S_CMD_TYPE
         ld bc, M4S_PORT_COMMAND
         out (c), a
 
         call m4load_read_byte
-        jr nc, rsx_diskwrite_close_error
+        jp nc, rsx_diskwrite_close_error
         ld c, a
         call m4load_read_byte
-        jr nc, rsx_diskwrite_close_error
+        jp nc, rsx_diskwrite_close_error
         ld b, a                          ; BC = returned byte count.
+
+        call m4load_read_byte            ; Read AMSDOS load address low byte.
+        jp nc, rsx_diskwrite_close_error
+        ld l, a
+        call m4load_read_byte            ; Read AMSDOS load address high byte.
+        jp nc, rsx_diskwrite_close_error
+        ld h, a
+        ld (M4S_DISKWRITE_LOAD), hl
+
+        call m4load_read_byte            ; Read AMSDOS entry address low byte.
+        jp nc, rsx_diskwrite_close_error
+        ld l, a
+        call m4load_read_byte            ; Read AMSDOS entry address high byte.
+        jp nc, rsx_diskwrite_close_error
+        ld h, a
+        ld (M4S_DISKWRITE_ENTRY), hl
+
+        call m4load_read_byte            ; Read AMSDOS type byte.
+        jp nc, rsx_diskwrite_close_error
+        ld (M4S_DISKWRITE_TYPE), a
 
         ld a, b
         cp 3
-        jr nc, rsx_diskwrite_close_error ; Refuse counts above 512 bytes.
+        jp nc, rsx_diskwrite_close_error ; Refuse counts above 512 bytes.
         cp 2
         jr nz, rsx_diskwrite_count_valid
         ld a, c
         or a
-        jr nz, rsx_diskwrite_close_error
+        jp nz, rsx_diskwrite_close_error
 
 rsx_diskwrite_count_valid:
         ld a, b
         or c
-        jr z, rsx_diskwrite_close_done
+        jp z, rsx_diskwrite_close_done
 
 rsx_diskwrite_byte_loop:
         call m4load_read_byte
-        jr nc, rsx_diskwrite_close_error
+        jp nc, rsx_diskwrite_close_error
         ld (M4S_DISKWRITE_BYTE), a
 
         push bc
@@ -1401,7 +1431,7 @@ rsx_diskwrite_char_ok:
         pop bc
         ld a, (M4S_DISKWRITE_STATUS)
         or a
-        jr nz, rsx_diskwrite_close_error
+        jp nz, rsx_diskwrite_close_error
 
         inc de
         dec bc
@@ -1411,10 +1441,12 @@ rsx_diskwrite_char_ok:
 
         ld a, d                          ; Stop if the 16-bit transfer offset
         or e                             ; wraps around at 64KB.
-        jr z, rsx_diskwrite_close_done
-        jr rsx_diskwrite_chunk
+        jp z, rsx_diskwrite_close_done
+        jp rsx_diskwrite_chunk
 
 rsx_diskwrite_close_done:
+        ld (M4S_IMPORT_DONE), de
+        call diskwrite_update_header
         push ix
         call CAS_OUT_CLOSE
         pop ix
@@ -1430,6 +1462,83 @@ rsx_diskwrite_close_error:
 rsx_diskwrite_error:
         ld hl, msg_diskwrite_error
         call print_string
+        ret
+
+diskwrite_update_header:
+        push hl
+        push de
+        push bc
+        push af
+        ld hl, (M4S_DISKWRITE_HEADER)
+        ld de, 18
+        add hl, de
+        ld a, (M4S_DISKWRITE_TYPE)
+        ld (hl), a
+        inc hl
+        xor a
+        ld (hl), a                        ; Data length low.
+        inc hl
+        ld (hl), a                        ; Data length high.
+        inc hl
+        ld de, (M4S_DISKWRITE_LOAD)
+        ld (hl), e
+        inc hl
+        ld (hl), d
+        inc hl
+        inc hl                            ; Logical length at header+24.
+        ld de, (M4S_IMPORT_DONE)
+        ld (hl), e
+        inc hl
+        ld (hl), d
+        inc hl
+        ld bc, (M4S_DISKWRITE_ENTRY)
+        ld (hl), c
+        inc hl
+        ld (hl), b
+        ld hl, (M4S_DISKWRITE_HEADER)
+        ld de, 64
+        add hl, de
+        ld de, (M4S_IMPORT_DONE)
+        ld (hl), e                        ; Real length low.
+        inc hl
+        ld (hl), d                        ; Real length middle.
+        inc hl
+        xor a
+        ld (hl), a                        ; Real length high.
+        call diskwrite_update_checksum
+        pop af
+        pop bc
+        pop de
+        pop hl
+        ret
+
+diskwrite_update_checksum:
+        push hl
+        push de
+        push bc
+        ld hl, 0
+        ld de, (M4S_DISKWRITE_HEADER)
+        ld b, 67
+
+diskwrite_checksum_loop:
+        push bc
+        ld a, (de)
+        ld c, a
+        ld b, 0
+        add hl, bc
+        inc de
+        pop bc
+        djnz diskwrite_checksum_loop
+        ex de, hl                         ; DE = checksum, HL = header+67.
+        ld hl, (M4S_DISKWRITE_HEADER)
+        ld bc, 67
+        add hl, bc
+        ld (hl), e
+        inc hl
+        ld (hl), d
+        pop bc
+        pop de
+        pop hl
         ret
 
 import_create_destination:
@@ -1457,12 +1566,29 @@ import_create_destination:
         call m4load_read_byte
         jp nc, import_response_failed
         cp "O"
-        jp nz, import_response_failed
+        jp nz, import_response_failed_print
         scf
         ret
 
 import_response_failed:
         or a
+        ret
+
+import_response_failed_print:
+        call print_response_from_a
+        or a
+        ret
+
+print_response_from_a:
+        or a
+        ret z
+
+print_response_loop:
+        call TXT_OUTPUT
+        call mailbox_read_byte
+        ret nc
+        or a
+        jr nz, print_response_loop
         ret
 
 ; Send the saved AMSDOS header to the host in two 64-byte halves.  Main_MiSTer
@@ -2114,6 +2240,53 @@ m4loadh_send_name:
         pop bc
         inc de
         djnz m4loadh_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop de
+        pop hl
+        ret
+
+; Send request "H:OOOO:filename" using the shared source descriptor at IX+2.
+m4diskwrite_send_request:
+        push hl
+        push de
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "H"
+        out (c), a
+        ld a, ":"
+        out (c), a
+        ld a, d
+        call m4load_send_hex_byte
+        ld a, e
+        call m4load_send_hex_byte
+        ld a, ":"
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        ld l, (ix+2)
+        ld h, (ix+3)                     ; HL = shared source descriptor.
+        ld b, (hl)                       ; B = filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = filename data.
+
+m4diskwrite_send_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz m4diskwrite_send_name
 
         xor a
         ld bc, M4S_PORT_DATA
