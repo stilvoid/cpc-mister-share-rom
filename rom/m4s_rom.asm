@@ -73,6 +73,7 @@ M4S_DISKWRITE_LOGICAL equ &9819          ; 16-bit AMSDOS output logical length.
 M4S_DISKWRITE_COUNT equ &981B            ; 16-bit current host payload count.
 M4S_DEBUG_MODE equ &981D                 ; Non-zero enables noisy diagnostics.
 M4S_PROGRESS_SEEN equ &981E              ; Non-zero after progress output.
+M4S_PROGRESS_DOTS equ &981F              ; Dots to print for current block.
 
         org KL_ROM_BASE
 
@@ -1162,6 +1163,15 @@ rsx_import_short_block:
 
 rsx_import_block_ready:
         ld (M4S_IMPORT_BLOCK), bc
+        ld a, 1
+        ld (M4S_PROGRESS_DOTS), a
+        ld a, b
+        cp 8
+        jr nz, rsx_import_progress_ready
+        ld a, 4
+        ld (M4S_PROGRESS_DOTS), a
+
+rsx_import_progress_ready:
         call import_load_buffer_base
 
 rsx_import_block_loop:
@@ -1196,7 +1206,7 @@ rsx_import_advance_chunk:
         jr rsx_import_block_loop
 
 rsx_import_block_done:
-        call print_progress_dot
+        call print_progress_dots
         jr rsx_import_refill
 
 rsx_import_close_done:
@@ -2119,8 +2129,8 @@ rsx_m4loadh_nonempty:
         out (c), a
         call m4load_read_byte
         jp nc, rsx_m4load_error
-        or a
-        jr z, rsx_m4load_error
+        cp 1
+        jp nz, rsx_m4load_error
 
         push ix
         call rsx_m4info_have_param
@@ -2639,6 +2649,18 @@ print_progress_dot:
         call TXT_OUTPUT
         ret
 
+print_progress_dots:
+        ld a, (M4S_PROGRESS_DOTS)
+
+print_progress_dots_loop:
+        or a
+        ret z
+        push af
+        call print_progress_dot
+        pop af
+        dec a
+        jr print_progress_dots_loop
+
 print_progress_newline:
         ld a, (M4S_DEBUG_MODE)
         or a
@@ -2658,10 +2680,21 @@ msg_intro:
 
 msg_about:
         db "M4S ROM Stage 4.14", 13, 10
-        db "Shared: ls cd pwd type hexdump stat", 13, 10
-        db "Files: loadm savem exec mkdir mv cp rm", 13, 10
-        db "Disk: diskread diskwrite", 13, 10
-        db "Debug: debug[,0|1]", 13, 10, 0
+        db "|ls[,", 34, "DIR", 34, "]", 13, 10
+        db "|cd[,", 34, "DIR", 34, "]  |pwd", 13, 10
+        db "|type,", 34, "FILE", 34, 13, 10
+        db "|hexdump,", 34, "FILE", 34, 13, 10
+        db "|stat,", 34, "FILE", 34, 13, 10
+        db "|loadm,", 34, "FILE", 34, "[,&ADDR]", 13, 10
+        db "|savem,", 34, "FILE", 34, ",&ADDR,&LEN", 13, 10
+        db "|exec,", 34, "FILE", 34, 13, 10
+        db "|mkdir,", 34, "DIR", 34, 13, 10
+        db "|mv,", 34, "OLD", 34, ",", 34, "NEW", 34, 13, 10
+        db "|cp,", 34, "SRC", 34, ",", 34, "DST", 34, 13, 10
+        db "|rm,", 34, "FILE", 34, 13, 10
+        db "|diskread,", 34, "DISC", 34, "[,", 34, "SHARED", 34, "[,0]]", 13, 10
+        db "|diskwrite,", 34, "SHARED", 34, ",", 34, "DISC", 34, 13, 10
+        db "|debug[,0|1]  |about", 13, 10, 0
 
 msg_debug_usage:
         db "Usage: |debug[,0|1]", 13, 10, 0
