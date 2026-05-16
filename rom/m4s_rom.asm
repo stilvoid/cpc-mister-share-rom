@@ -45,6 +45,7 @@ CAS_OUT_CLOSE   equ &BC8F                ; Firmware: close AMSDOS output file.
 CAS_OUT_CHAR    equ &BC95                ; Firmware: write byte to AMSDOS output.
 CHAR_CR         equ 13
 CHAR_LF         equ 10
+CHAR_BS         equ 8
 CHAR_EOF        equ 26
 M4S_LOAD_ADDR   equ &4000
 M4S_DISC_BUFFER equ &8800                ; 2KB AMSDOS input buffer.
@@ -69,6 +70,8 @@ M4S_DISKWRITE_COUNT equ &981B            ; 16-bit current host payload count.
 M4S_DEBUG_MODE equ &981D                 ; Non-zero enables noisy diagnostics.
 M4S_PROGRESS_SEEN equ &981E              ; Non-zero after progress output.
 M4S_DISKWRITE_PROGRESS equ &981F         ; 512-byte chunks until next dot.
+M4S_PROGRESS_TOTAL equ &9820             ; Total 2KB progress blocks.
+M4S_PROGRESS_DONE equ &9821              ; Completed 2KB progress blocks.
 
         org KL_ROM_BASE
 
@@ -1104,6 +1107,8 @@ rsx_import_nonempty:
 
         ld hl, msg_reading
         call print_progress_prefix
+        ld hl, (M4S_IMPORT_REMAIN)
+        call progress_init
         ld de, 0                          ; DE = shared destination file offset.
         push de
         push ix
@@ -1176,7 +1181,7 @@ rsx_import_advance_chunk:
         jr rsx_import_block_loop
 
 rsx_import_block_done:
-        call print_progress_dot
+        call progress_update
         jr rsx_import_refill
 
 rsx_import_close_done:
@@ -1434,6 +1439,10 @@ rsx_diskwrite_nonempty:
         push hl
         ld hl, msg_writing
         call print_progress_prefix
+        pop hl
+        push hl
+        ld hl, (M4S_DISKWRITE_LOGICAL)
+        call progress_init
         pop hl
         ld (M4S_DISKWRITE_HEADER), hl
         call diskwrite_update_header
@@ -2627,14 +2636,33 @@ print_progress_prefix:
         call print_string
         ret
 
-print_progress_dot:
+progress_init:
         ld a, (M4S_DEBUG_MODE)
         or a
         ret nz
-        ld a, 1
-        ld (M4S_PROGRESS_SEEN), a
-        ld a, "."
-        call TXT_OUTPUT
+        ld a, h
+        srl a
+        srl a
+        srl a
+        ld c, a                          ; C = floor(total / 2048).
+        ld a, h
+        and 7
+        or l
+        jr z, progress_init_blocks_ready
+        inc c
+
+progress_init_blocks_ready:
+        ld a, c
+        or a
+        jr nz, progress_init_nonzero
+        inc c
+
+progress_init_nonzero:
+        ld a, c
+        ld (M4S_PROGRESS_TOTAL), a
+        xor a
+        ld (M4S_PROGRESS_DONE), a
+        call progress_print_percent
         ret
 
 diskwrite_progress_chunk:
@@ -2647,7 +2675,7 @@ diskwrite_progress_chunk:
 diskwrite_progress_dot:
         ld a, 4
         ld (M4S_DISKWRITE_PROGRESS), a
-        call print_progress_dot
+        call progress_update
         ret
 
 diskwrite_progress_flush:
@@ -2658,7 +2686,126 @@ diskwrite_progress_flush:
         ld a, (M4S_DISKWRITE_PROGRESS)
         cp 4
         ret z
-        call print_progress_dot
+        call progress_update
+        ret
+
+progress_update:
+        ld a, (M4S_DEBUG_MODE)
+        or a
+        ret nz
+        ld a, (M4S_PROGRESS_DONE)
+        ld c, a
+        ld a, (M4S_PROGRESS_TOTAL)
+        cp c
+        jr z, progress_update_print
+        ld a, c
+        inc a
+        ld (M4S_PROGRESS_DONE), a
+
+progress_update_print:
+        call progress_backspace_percent
+        call progress_print_percent
+        ret
+
+progress_backspace_percent:
+        ld b, 4
+
+progress_backspace_loop:
+        ld a, CHAR_BS
+        call TXT_OUTPUT
+        djnz progress_backspace_loop
+        ret
+
+progress_print_percent:
+        call progress_calculate_percent
+        call progress_print_percent_value
+        ret
+
+progress_calculate_percent:
+        ld a, (M4S_PROGRESS_DONE)
+        ld b, a
+        ld hl, 0
+        ld de, 100
+
+progress_percent_multiply:
+        ld a, b
+        or a
+        jr z, progress_percent_divide
+        add hl, de
+        dec b
+        jr progress_percent_multiply
+
+progress_percent_divide:
+        ld a, (M4S_PROGRESS_TOTAL)
+        ld c, a
+        ld b, 0
+
+progress_percent_divide_loop:
+        ld a, h
+        or a
+        jr nz, progress_percent_subtract
+        ld a, l
+        cp c
+        jr c, progress_percent_done
+
+progress_percent_subtract:
+        ld a, l
+        sub c
+        ld l, a
+        ld a, h
+        sbc a, 0
+        ld h, a
+        inc b
+        jr progress_percent_divide_loop
+
+progress_percent_done:
+        ld a, b
+        ret
+
+progress_print_percent_value:
+        cp 100
+        jr nz, progress_print_under_100
+        ld a, "1"
+        call TXT_OUTPUT
+        ld a, "0"
+        call TXT_OUTPUT
+        ld a, "0"
+        call TXT_OUTPUT
+        ld a, "%"
+        call TXT_OUTPUT
+        ret
+
+progress_print_under_100:
+        ld b, 0
+
+progress_print_tens_loop:
+        cp 10
+        jr c, progress_print_digits
+        sub 10
+        inc b
+        jr progress_print_tens_loop
+
+progress_print_digits:
+        push af
+        ld a, " "
+        call TXT_OUTPUT
+        ld a, b
+        or a
+        jr nz, progress_print_tens
+        ld a, " "
+        jr progress_print_tens_done
+
+progress_print_tens:
+        ld a, b
+        add a, "0"
+
+progress_print_tens_done:
+        call TXT_OUTPUT
+        pop af
+        add a, "0"
+        call TXT_OUTPUT
+        ld a, "%"
+        call TXT_OUTPUT
         ret
 
 print_progress_newline:
