@@ -2690,9 +2690,12 @@ diskwrite_progress_flush:
         ret
 
 progress_update:
+        push hl
+        push de
+        push bc
         ld a, (M4S_DEBUG_MODE)
         or a
-        ret nz
+        jr nz, progress_update_done
         ld a, (M4S_PROGRESS_DONE)
         ld c, a
         ld a, (M4S_PROGRESS_TOTAL)
@@ -2705,6 +2708,10 @@ progress_update:
 progress_update_print:
         call progress_backspace_percent
         call progress_print_percent
+progress_update_done:
+        pop bc
+        pop de
+        pop hl
         ret
 
 progress_backspace_percent:
