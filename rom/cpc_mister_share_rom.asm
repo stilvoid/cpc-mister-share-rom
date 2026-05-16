@@ -1,5 +1,5 @@
 ; SPDX-License-Identifier: GPL-2.0-or-later
-; CPC MiSTer Mass Storage experiment ROM.
+; CPC MiSTer Share experiment ROM.
 ;
 ; This is a deliberately small Amstrad CPC background expansion ROM.  It
 ; registers RSX commands with the CPC firmware:
@@ -32,7 +32,7 @@
 ; Running |ls reads a directory text stream from the experimental FPGA
 ; mailbox ports.
 
-        include "m4s_protocol.inc"       ; Mailbox port and command constants.
+        include "cpc_mister_share_protocol.inc"       ; Mailbox port and command constants.
 
 KL_ROM_BASE     equ &C000
 KM_WAIT_CHAR    equ &BB06                ; Firmware: wait for a keypress.
@@ -48,31 +48,31 @@ CHAR_CR         equ 13
 CHAR_LF         equ 10
 CHAR_BS         equ 8
 CHAR_EOF        equ 26
-M4S_LOAD_ADDR   equ &4000
-M4S_DISC_BUFFER equ &8800                ; 2KB AMSDOS input buffer.
-M4S_IMPORT_HEADER equ &9000              ; 128-byte saved AMSDOS header.
-M4S_IMPORT_REMAIN equ &9800              ; 16-bit remaining diskread bytes.
-M4S_IMPORT_FILEHEAD equ &9802            ; 16-bit AMSDOS buffer control ptr.
-M4S_IMPORT_BLOCK equ &9804               ; 16-bit bytes left in AMSDOS buffer.
-M4S_IMPORT_CHUNK equ &9806               ; 8-bit current shared write length.
-M4S_IMPORT_REQ_TYPE equ &9807            ; "S" create/truncate or "W" patch.
-M4S_IMPORT_DONE equ &9808                ; 16-bit diskread payload bytes sent.
-M4S_IMPORT_SRC_DESC equ &980A            ; 16-bit diskread source descriptor.
-M4S_IMPORT_DST_DESC equ &980C            ; 16-bit diskread destination descriptor.
-M4S_IMPORT_HEADER_MODE equ &980E         ; Non-zero means prepend AMSDOS header.
-M4S_DISKWRITE_BYTE equ &9810             ; Byte currently being written to disk.
-M4S_DISKWRITE_STATUS equ &9811           ; Non-zero means CAS_OUT_CHAR failed.
-M4S_DISKWRITE_HEADER equ &9812           ; 16-bit AMSDOS output header pointer.
-M4S_DISKWRITE_TYPE equ &9814             ; AMSDOS output file type.
-M4S_DISKWRITE_LOAD equ &9815             ; 16-bit AMSDOS output load address.
-M4S_DISKWRITE_ENTRY equ &9817            ; 16-bit AMSDOS output entry address.
-M4S_DISKWRITE_LOGICAL equ &9819          ; 16-bit AMSDOS output logical length.
-M4S_DISKWRITE_COUNT equ &981B            ; 16-bit current host payload count.
-M4S_DEBUG_MODE equ &981D                 ; Non-zero enables noisy diagnostics.
-M4S_PROGRESS_SEEN equ &981E              ; Non-zero after progress output.
-M4S_DISKWRITE_PROGRESS equ &981F         ; 512-byte chunks until next dot.
-M4S_PROGRESS_TOTAL equ &9820             ; Total 2KB progress blocks.
-M4S_PROGRESS_DONE equ &9821              ; Completed 2KB progress blocks.
+CMS_LOAD_ADDR   equ &4000
+CMS_DISC_BUFFER equ &8800                ; 2KB AMSDOS input buffer.
+CMS_IMPORT_HEADER equ &9000              ; 128-byte saved AMSDOS header.
+CMS_IMPORT_REMAIN equ &9800              ; 16-bit remaining diskread bytes.
+CMS_IMPORT_FILEHEAD equ &9802            ; 16-bit AMSDOS buffer control ptr.
+CMS_IMPORT_BLOCK equ &9804               ; 16-bit bytes left in AMSDOS buffer.
+CMS_IMPORT_CHUNK equ &9806               ; 8-bit current shared write length.
+CMS_IMPORT_REQ_TYPE equ &9807            ; "S" create/truncate or "W" patch.
+CMS_IMPORT_DONE equ &9808                ; 16-bit diskread payload bytes sent.
+CMS_IMPORT_SRC_DESC equ &980A            ; 16-bit diskread source descriptor.
+CMS_IMPORT_DST_DESC equ &980C            ; 16-bit diskread destination descriptor.
+CMS_IMPORT_HEADER_MODE equ &980E         ; Non-zero means prepend AMSDOS header.
+CMS_DISKWRITE_BYTE equ &9810             ; Byte currently being written to disk.
+CMS_DISKWRITE_STATUS equ &9811           ; Non-zero means CAS_OUT_CHAR failed.
+CMS_DISKWRITE_HEADER equ &9812           ; 16-bit AMSDOS output header pointer.
+CMS_DISKWRITE_TYPE equ &9814             ; AMSDOS output file type.
+CMS_DISKWRITE_LOAD equ &9815             ; 16-bit AMSDOS output load address.
+CMS_DISKWRITE_ENTRY equ &9817            ; 16-bit AMSDOS output entry address.
+CMS_DISKWRITE_LOGICAL equ &9819          ; 16-bit AMSDOS output logical length.
+CMS_DISKWRITE_COUNT equ &981B            ; 16-bit current host payload count.
+CMS_DEBUG_MODE equ &981D                 ; Non-zero enables noisy diagnostics.
+CMS_PROGRESS_SEEN equ &981E              ; Non-zero after progress output.
+CMS_DISKWRITE_PROGRESS equ &981F         ; 512-byte chunks until next dot.
+CMS_PROGRESS_TOTAL equ &9820             ; Total 2KB progress blocks.
+CMS_PROGRESS_DONE equ &9821              ; Completed 2KB progress blocks.
 
         org KL_ROM_BASE
 
@@ -98,15 +98,15 @@ rom_prefix:
         dw command_names                 ; External command name table.
 
         jp rom_init                      ; Entry 0: firmware power-up entry.
-        jp rsx_m4dir                     ; Entry 1: BASIC command |ls.
-        jp rsx_m4cd                      ; Entry 2: BASIC command |cd.
+        jp rsx_ls                     ; Entry 1: BASIC command |ls.
+        jp rsx_cd                      ; Entry 2: BASIC command |cd.
         jp rsx_pwd                       ; Entry 3: BASIC command |pwd.
-        jp rsx_m4type                    ; Entry 4: BASIC command |type.
-        jp rsx_m4dump                    ; Entry 5: BASIC command |hexdump.
-        jp rsx_m4info                    ; Entry 6: BASIC command |stat.
-        jp rsx_m4load                    ; Entry 7: BASIC command |loadm.
-        jp rsx_m4save                    ; Entry 8: BASIC command |savem.
-        jp rsx_m4loadh                   ; Entry 9: BASIC command |exec.
+        jp rsx_type                    ; Entry 4: BASIC command |type.
+        jp rsx_hexdump                    ; Entry 5: BASIC command |hexdump.
+        jp rsx_stat                    ; Entry 6: BASIC command |stat.
+        jp rsx_loadm                    ; Entry 7: BASIC command |loadm.
+        jp rsx_savem                    ; Entry 8: BASIC command |savem.
+        jp rsx_exec                   ; Entry 9: BASIC command |exec.
         jp rsx_mkdir                     ; Entry 10: BASIC command |mkdir.
         jp rsx_mv                        ; Entry 11: BASIC command |mv.
         jp rsx_cp                        ; Entry 12: BASIC command |cp.
@@ -127,16 +127,16 @@ rom_prefix:
 ; normal BASIC syntax from generating this command.
 ; ---------------------------------------------------------------------------
 command_names:
-        db "M4S BOO", &D4                ; Entry 0: rom_init ("T" + bit 7).
-        db "L", &D3                      ; Entry 1: rsx_m4dir ("S" + bit 7).
-        db "C", &C4                      ; Entry 2: rsx_m4cd ("D" + bit 7).
+        db "CMS BOO", &D4                ; Entry 0: rom_init ("T" + bit 7).
+        db "L", &D3                      ; Entry 1: rsx_ls ("S" + bit 7).
+        db "C", &C4                      ; Entry 2: rsx_cd ("D" + bit 7).
         db "PW", &C4                     ; Entry 3: rsx_pwd ("D" + bit 7).
-        db "TYP", &C5                    ; Entry 4: rsx_m4type ("E" + bit 7).
-        db "HEXDUM", &D0                 ; Entry 5: rsx_m4dump ("P" + bit 7).
-        db "STA", &D4                    ; Entry 6: rsx_m4info ("T" + bit 7).
-        db "LOAD", &CD                   ; Entry 7: rsx_m4load ("M" + bit 7).
-        db "SAVE", &CD                   ; Entry 8: rsx_m4save ("M" + bit 7).
-        db "EXE", &C3                    ; Entry 9: rsx_m4loadh ("C" + bit 7).
+        db "TYP", &C5                    ; Entry 4: rsx_type ("E" + bit 7).
+        db "HEXDUM", &D0                 ; Entry 5: rsx_hexdump ("P" + bit 7).
+        db "STA", &D4                    ; Entry 6: rsx_stat ("T" + bit 7).
+        db "LOAD", &CD                   ; Entry 7: rsx_loadm ("M" + bit 7).
+        db "SAVE", &CD                   ; Entry 8: rsx_savem ("M" + bit 7).
+        db "EXE", &C3                    ; Entry 9: rsx_exec ("C" + bit 7).
         db "MKDI", &D2                   ; Entry 10: rsx_mkdir ("R" + bit 7).
         db "M", &D6                      ; Entry 11: rsx_mv ("V" + bit 7).
         db "C", &D0                      ; Entry 12: rsx_cp ("P" + bit 7).
@@ -164,8 +164,8 @@ rom_init:
         push de
         push hl
         xor a
-        ld (M4S_DEBUG_MODE), a
-        ld (M4S_PROGRESS_SEEN), a
+        ld (CMS_DEBUG_MODE), a
+        ld (CMS_PROGRESS_SEEN), a
         ld hl, msg_intro
         call print_string
         pop hl
@@ -194,10 +194,10 @@ rsx_debug_set:
         ld a, (ix+0)
         ld h, (ix+1)
         or h
-        ld (M4S_DEBUG_MODE), a
+        ld (CMS_DEBUG_MODE), a
 
 rsx_debug_show:
-        ld a, (M4S_DEBUG_MODE)
+        ld a, (CMS_DEBUG_MODE)
         or a
         jr z, rsx_debug_off
         ld hl, msg_debug_on
@@ -216,29 +216,29 @@ rsx_debug_off:
 ; returned zero-terminated byte stream.  The FPGA currently supplies hardcoded
 ; mock data.
 ; ---------------------------------------------------------------------------
-rsx_m4dir:
+rsx_ls:
         cp 0
-        jr z, rsx_m4dir_current
+        jr z, rsx_ls_current
         cp 1
-        jr z, rsx_m4dir_have_param
+        jr z, rsx_ls_have_param
         ld hl, msg_ls_usage
         call print_string
         ret
 
-rsx_m4dir_current:
-        ld a, M4S_CMD_DIR_BEGIN
-        ld bc, M4S_PORT_COMMAND
+rsx_ls_current:
+        ld a, CMS_CMD_DIR_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
         xor a
         ld e, a
-        jr rsx_m4dir_loop
+        jr rsx_ls_loop
 
-rsx_m4dir_have_param:
+rsx_ls_have_param:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr z, rsx_m4dir_current
+        jr z, rsx_ls_current
 
         ld b, a                          ; B = remaining length.
         inc hl
@@ -246,55 +246,55 @@ rsx_m4dir_have_param:
         inc hl
         ld d, (hl)                       ; DE = string data.
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "G"
         out (c), a
         ld a, ":"
         out (c), a
 
-rsx_m4dir_send_name:
+rsx_ls_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz rsx_m4dir_send_name
+        djnz rsx_ls_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
         ld e, a
 
-rsx_m4dir_loop:
+rsx_ls_loop:
         call mailbox_read_byte
         ret nc
         or a
         ret z
         cp CHAR_LF
-        jr nz, rsx_m4dir_output
+        jr nz, rsx_ls_output
         ld a, e
         cp CHAR_CR
         ld a, CHAR_LF
-        jr z, rsx_m4dir_output
+        jr z, rsx_ls_output
         push af
         ld a, CHAR_CR
         call TXT_OUTPUT
         pop af
-rsx_m4dir_output:
+rsx_ls_output:
         call TXT_OUTPUT
         ld e, a
-        jr rsx_m4dir_loop
+        jr rsx_ls_loop
 
 ; ---------------------------------------------------------------------------
 ; |cd and |cd,"dirname" RSX implementation.
@@ -303,94 +303,94 @@ rsx_m4dir_output:
 ; shared root.  With one string parameter, enters a child directory under the
 ; current folder.  Main_MiSTer rejects absolute paths and parent traversal.
 ; ---------------------------------------------------------------------------
-rsx_m4cd:
+rsx_cd:
         cp 0
-        jr z, rsx_m4cd_root
+        jr z, rsx_cd_root
         cp 1
-        jr z, rsx_m4cd_have_param
+        jr z, rsx_cd_have_param
         ld hl, msg_cd_usage
         call print_string
         ret
 
-rsx_m4cd_root:
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+rsx_cd_root:
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "C"
         out (c), a
         ld a, ":"
         out (c), a
         xor a
         out (c), a
-        jr rsx_m4cd_send_command
+        jr rsx_cd_send_command
 
-rsx_m4cd_have_param:
+rsx_cd_have_param:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4cd_nonempty
-        jr rsx_m4cd_root
+        jr nz, rsx_cd_nonempty
+        jr rsx_cd_root
 
-rsx_m4cd_nonempty:
+rsx_cd_nonempty:
         ld b, a                          ; B = remaining length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)                       ; DE = string data.
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "C"
         out (c), a
         ld a, ":"
         out (c), a
 
-rsx_m4cd_send_name:
+rsx_cd_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz rsx_m4cd_send_name
+        djnz rsx_cd_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-rsx_m4cd_send_command:
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+rsx_cd_send_command:
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
         ld e, a
 
-rsx_m4cd_loop:
+rsx_cd_loop:
         call mailbox_read_byte
         ret nc
         or a
         ret z
         cp CHAR_LF
-        jr nz, rsx_m4cd_output
+        jr nz, rsx_cd_output
         ld a, e
         cp CHAR_CR
         ld a, CHAR_LF
-        jr z, rsx_m4cd_output
+        jr z, rsx_cd_output
         push af
         ld a, CHAR_CR
         call TXT_OUTPUT
         pop af
-rsx_m4cd_output:
+rsx_cd_output:
         call TXT_OUTPUT
         ld e, a
-        jr rsx_m4cd_loop
+        jr rsx_cd_loop
 
 ; ---------------------------------------------------------------------------
 ; |pwd RSX implementation.
@@ -406,11 +406,11 @@ rsx_pwd:
         ret
 
 rsx_pwd_no_params:
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "C"
         out (c), a
         ld a, ":"
@@ -419,7 +419,7 @@ rsx_pwd_no_params:
         out (c), a
         xor a
         out (c), a
-        jr rsx_m4cd_send_command
+        jr rsx_cd_send_command
 
 ; ---------------------------------------------------------------------------
 ; |type,"filename" RSX implementation.
@@ -428,73 +428,73 @@ rsx_pwd_no_params:
 ; to the FPGA mailbox, asks Main_MiSTer to read it from the shared folder, and
 ; prints the returned byte stream.
 ; ---------------------------------------------------------------------------
-rsx_m4type:
+rsx_type:
         cp 1
-        jr z, rsx_m4type_have_param
+        jr z, rsx_type_have_param
         ld hl, msg_type_usage
         call print_string
         ret
 
-rsx_m4type_have_param:
+rsx_type_have_param:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4type_nonempty
+        jr nz, rsx_type_nonempty
         ld hl, msg_type_usage
         call print_string
         ret
 
-rsx_m4type_nonempty:
+rsx_type_nonempty:
         ld b, a                          ; B = remaining length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)                       ; DE = string data.
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-rsx_m4type_send_name:
+rsx_type_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz rsx_m4type_send_name
+        djnz rsx_type_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
         ld e, a
 
-rsx_m4type_loop:
+rsx_type_loop:
         call mailbox_read_byte
         ret nc
         or a
         ret z
         cp CHAR_LF
-        jr nz, rsx_m4type_output
+        jr nz, rsx_type_output
         ld a, e
         cp CHAR_CR
         ld a, CHAR_LF
-        jr z, rsx_m4type_output
+        jr z, rsx_type_output
         push af
         ld a, CHAR_CR
         call TXT_OUTPUT
         pop af
-rsx_m4type_output:
+rsx_type_output:
         call TXT_OUTPUT
         ld e, a
-        jr rsx_m4type_loop
+        jr rsx_type_loop
 
 ; ---------------------------------------------------------------------------
 ; |hexdump,"filename" RSX implementation.
@@ -504,79 +504,79 @@ rsx_m4type_output:
 ; ASCII hex dump, proving the host-side binary read path without changing the
 ; stream framing yet.
 ; ---------------------------------------------------------------------------
-rsx_m4dump:
+rsx_hexdump:
         cp 1
-        jr z, rsx_m4dump_have_param
+        jr z, rsx_hexdump_have_param
         ld hl, msg_dump_usage
         call print_string
         ret
 
-rsx_m4dump_have_param:
+rsx_hexdump_have_param:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4dump_nonempty
+        jr nz, rsx_hexdump_nonempty
         ld hl, msg_dump_usage
         call print_string
         ret
 
-rsx_m4dump_nonempty:
+rsx_hexdump_nonempty:
         ld b, a                          ; B = remaining length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)                       ; DE = string data.
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "D"
         out (c), a
         ld a, ":"
         out (c), a
 
-rsx_m4dump_send_name:
+rsx_hexdump_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz rsx_m4dump_send_name
+        djnz rsx_hexdump_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
         ld e, a
 
-rsx_m4dump_loop:
+rsx_hexdump_loop:
         call mailbox_read_byte
         ret nc
         or a
         ret z
         cp CHAR_LF
-        jr nz, rsx_m4dump_output
+        jr nz, rsx_hexdump_output
         ld a, e
         cp CHAR_CR
         ld a, CHAR_LF
-        jr z, rsx_m4dump_output
+        jr z, rsx_hexdump_output
         push af
         ld a, CHAR_CR
         call TXT_OUTPUT
         pop af
-rsx_m4dump_output:
+rsx_hexdump_output:
         call TXT_OUTPUT
         ld e, a
-        jr rsx_m4dump_loop
+        jr rsx_hexdump_loop
 
 ; ---------------------------------------------------------------------------
 ; |stat,"filename" RSX implementation.
@@ -585,79 +585,79 @@ rsx_m4dump_output:
 ; file size and AMSDOS header fields if the first 128 bytes pass the AMSDOS
 ; checksum.
 ; ---------------------------------------------------------------------------
-rsx_m4info:
+rsx_stat:
         cp 1
-        jr z, rsx_m4info_have_param
+        jr z, rsx_stat_have_param
         ld hl, msg_info_usage
         call print_string
         ret
 
-rsx_m4info_have_param:
+rsx_stat_have_param:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4info_nonempty
+        jr nz, rsx_stat_nonempty
         ld hl, msg_info_usage
         call print_string
         ret
 
-rsx_m4info_nonempty:
+rsx_stat_nonempty:
         ld b, a                          ; B = remaining length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)                       ; DE = string data.
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "I"
         out (c), a
         ld a, ":"
         out (c), a
 
-rsx_m4info_send_name:
+rsx_stat_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz rsx_m4info_send_name
+        djnz rsx_stat_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
         ld e, a
 
-rsx_m4info_loop:
+rsx_stat_loop:
         call mailbox_read_byte
         ret nc
         or a
         ret z
         cp CHAR_LF
-        jr nz, rsx_m4info_output
+        jr nz, rsx_stat_output
         ld a, e
         cp CHAR_CR
         ld a, CHAR_LF
-        jr z, rsx_m4info_output
+        jr z, rsx_stat_output
         push af
         ld a, CHAR_CR
         call TXT_OUTPUT
         pop af
-rsx_m4info_output:
+rsx_stat_output:
         call TXT_OUTPUT
         ld e, a
-        jr rsx_m4info_loop
+        jr rsx_stat_loop
 
 ; ---------------------------------------------------------------------------
 ; |mkdir,"dirname" RSX implementation.
@@ -689,11 +689,11 @@ rsx_mkdir_nonempty:
         inc hl
         ld d, (hl)                       ; DE = string data.
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "K"
         out (c), a
         ld a, ":"
@@ -702,18 +702,18 @@ rsx_mkdir_nonempty:
 rsx_mkdir_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
         djnz rsx_mkdir_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
@@ -773,11 +773,11 @@ rsx_mv_old_nonempty:
         ret
 
 rsx_mv_nonempty:
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "N"
         out (c), a
         ld a, ":"
@@ -788,7 +788,7 @@ rsx_mv_nonempty:
         call mv_send_descriptor
 
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         ld l, (ix+0)
@@ -796,11 +796,11 @@ rsx_mv_nonempty:
         call mv_send_descriptor
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
@@ -836,7 +836,7 @@ mv_send_descriptor:
 mv_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
@@ -877,11 +877,11 @@ rsx_cp_source_nonempty:
         ret
 
 rsx_cp_nonempty:
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "P"
         out (c), a
         ld a, ":"
@@ -892,7 +892,7 @@ rsx_cp_nonempty:
         call mv_send_descriptor
 
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         ld l, (ix+0)
@@ -900,11 +900,11 @@ rsx_cp_nonempty:
         call mv_send_descriptor
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
@@ -954,11 +954,11 @@ rsx_rm_have_param:
         ret
 
 rsx_rm_nonempty:
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "R"
         out (c), a
         ld a, ":"
@@ -969,11 +969,11 @@ rsx_rm_nonempty:
         call mv_send_descriptor
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
         xor a
@@ -1020,37 +1020,37 @@ rsx_diskread:
 rsx_import_one_param:
         ld l, (ix+0)                     ; Disk filename is also shared path.
         ld h, (ix+1)
-        ld (M4S_IMPORT_SRC_DESC), hl
-        ld (M4S_IMPORT_DST_DESC), hl
+        ld (CMS_IMPORT_SRC_DESC), hl
+        ld (CMS_IMPORT_DST_DESC), hl
         ld a, 1
-        ld (M4S_IMPORT_HEADER_MODE), a
+        ld (CMS_IMPORT_HEADER_MODE), a
         jr rsx_import_have_params
 
 rsx_import_two_params:
         ld l, (ix+2)                     ; First BASIC arg: disk filename.
         ld h, (ix+3)
-        ld (M4S_IMPORT_SRC_DESC), hl
+        ld (CMS_IMPORT_SRC_DESC), hl
         ld l, (ix+0)                     ; Second BASIC arg: shared path.
         ld h, (ix+1)
-        ld (M4S_IMPORT_DST_DESC), hl
+        ld (CMS_IMPORT_DST_DESC), hl
         ld a, 1
-        ld (M4S_IMPORT_HEADER_MODE), a
+        ld (CMS_IMPORT_HEADER_MODE), a
         jr rsx_import_have_params
 
 rsx_import_three_params:
         ld l, (ix+4)                     ; First BASIC arg: disk filename.
         ld h, (ix+5)
-        ld (M4S_IMPORT_SRC_DESC), hl
+        ld (CMS_IMPORT_SRC_DESC), hl
         ld l, (ix+2)                     ; Second BASIC arg: shared path.
         ld h, (ix+3)
-        ld (M4S_IMPORT_DST_DESC), hl
+        ld (CMS_IMPORT_DST_DESC), hl
         ld a, (ix+0)                     ; Third BASIC arg: 0 strips header.
         ld h, (ix+1)
         or h
-        ld (M4S_IMPORT_HEADER_MODE), a
+        ld (CMS_IMPORT_HEADER_MODE), a
 
 rsx_import_have_params:
-        ld hl, (M4S_IMPORT_SRC_DESC)      ; HL = disk filename descriptor.
+        ld hl, (CMS_IMPORT_SRC_DESC)      ; HL = disk filename descriptor.
         ld a, (hl)
         or a
         jr nz, rsx_import_source_nonempty
@@ -1059,7 +1059,7 @@ rsx_import_have_params:
         ret
 
 rsx_import_source_nonempty:
-        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
+        ld hl, (CMS_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         ld a, (hl)
         or a
         jr nz, rsx_import_nonempty
@@ -1069,15 +1069,15 @@ rsx_import_source_nonempty:
 
 rsx_import_nonempty:
         xor a
-        ld (M4S_PROGRESS_SEEN), a
-        ld hl, (M4S_IMPORT_SRC_DESC)      ; HL = disk filename descriptor.
+        ld (CMS_PROGRESS_SEEN), a
+        ld hl, (CMS_IMPORT_SRC_DESC)      ; HL = disk filename descriptor.
         ld b, (hl)                       ; B = filename length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)
         ex de, hl                        ; HL = disk filename data.
-        ld de, M4S_DISC_BUFFER           ; DE = 2KB AMSDOS buffer.
+        ld de, CMS_DISC_BUFFER           ; DE = 2KB AMSDOS buffer.
         push ix
         call CAS_IN_OPEN
         pop ix
@@ -1090,7 +1090,7 @@ rsx_import_nonempty:
         ld c, (hl)
         inc hl
         ld b, (hl)                        ; BC = file payload length.
-        ld (M4S_IMPORT_REMAIN), bc
+        ld (CMS_IMPORT_REMAIN), bc
         push bc
         call debug_print_lengths
         pop bc
@@ -1101,14 +1101,14 @@ rsx_import_nonempty:
         pop hl
         ld de, -5
         add hl, de
-        ld (M4S_IMPORT_FILEHEAD), hl       ; Hidden AMSDOS buffer control.
+        ld (CMS_IMPORT_FILEHEAD), hl       ; Hidden AMSDOS buffer control.
 
         call import_create_destination
         jp nc, rsx_import_create_error
 
         ld hl, msg_reading
         call print_progress_prefix
-        ld hl, (M4S_IMPORT_REMAIN)
+        ld hl, (CMS_IMPORT_REMAIN)
         call progress_init
         ld de, 0                          ; DE = shared destination file offset.
         push de
@@ -1120,7 +1120,7 @@ rsx_import_nonempty:
         jr rsx_import_copy_buffer
 
 rsx_import_refill:
-        ld bc, (M4S_IMPORT_REMAIN)
+        ld bc, (CMS_IMPORT_REMAIN)
         ld a, b
         or c
         jr z, rsx_import_close_done
@@ -1136,7 +1136,7 @@ rsx_import_refill:
         jp nz, rsx_import_close_error
 
 rsx_import_copy_buffer:
-        ld bc, (M4S_IMPORT_REMAIN)
+        ld bc, (CMS_IMPORT_REMAIN)
         ld a, b
         cp 8
         jr c, rsx_import_short_block
@@ -1144,14 +1144,14 @@ rsx_import_copy_buffer:
         jr rsx_import_block_ready
 
 rsx_import_short_block:
-        ld bc, (M4S_IMPORT_REMAIN)
+        ld bc, (CMS_IMPORT_REMAIN)
 
 rsx_import_block_ready:
-        ld (M4S_IMPORT_BLOCK), bc
+        ld (CMS_IMPORT_BLOCK), bc
         call import_load_buffer_base
 
 rsx_import_block_loop:
-        ld bc, (M4S_IMPORT_BLOCK)
+        ld bc, (CMS_IMPORT_BLOCK)
         ld a, b
         or c
         jr z, rsx_import_block_done
@@ -1166,12 +1166,12 @@ rsx_import_chunk_64:
         ld a, 64
 
 rsx_import_chunk_ready:
-        ld (M4S_IMPORT_CHUNK), a
+        ld (CMS_IMPORT_CHUNK), a
         call import_send_chunk_request
         jp nc, rsx_import_close_error
-        ld a, (M4S_IMPORT_CHUNK)
+        ld a, (CMS_IMPORT_CHUNK)
         call import_decrease_remaining
-        ld a, (M4S_IMPORT_CHUNK)
+        ld a, (CMS_IMPORT_CHUNK)
         call import_decrease_block
 
 rsx_import_advance_chunk:
@@ -1186,12 +1186,12 @@ rsx_import_block_done:
         jr rsx_import_refill
 
 rsx_import_close_done:
-        ld (M4S_IMPORT_DONE), de
+        ld (CMS_IMPORT_DONE), de
         push ix
         call CAS_IN_CLOSE
         pop ix
         call debug_print_done
-        ld a, (M4S_IMPORT_HEADER_MODE)
+        ld a, (CMS_IMPORT_HEADER_MODE)
         or a
         jr z, rsx_import_done
         call import_prepend_saved_header
@@ -1208,13 +1208,13 @@ import_save_header:
         push de
         push bc
         push hl
-        ld de, M4S_IMPORT_HEADER
+        ld de, CMS_IMPORT_HEADER
         ld bc, 69
         ldir
         pop hl
         ld de, &00D4                     ; M4 ROM: (0xE4-0x55)+69.
         add hl, de
-        ld de, M4S_IMPORT_HEADER + 69
+        ld de, CMS_IMPORT_HEADER + 69
         ld bc, 59
         ldir
         pop bc
@@ -1225,7 +1225,7 @@ import_save_header:
 ; Diagnostic for diskread length mismatches.  BC is the AMSDOS header length and
 ; the next word on the stack is the length returned directly by CAS_IN_OPEN.
 debug_print_lengths:
-        ld a, (M4S_DEBUG_MODE)
+        ld a, (CMS_DEBUG_MODE)
         or a
         ret z
         push hl
@@ -1251,17 +1251,17 @@ debug_print_lengths:
         ret
 
 debug_print_done:
-        ld a, (M4S_DEBUG_MODE)
+        ld a, (CMS_DEBUG_MODE)
         or a
         ret z
         push hl
         ld hl, msg_import_done_len
         call print_string
-        ld hl, (M4S_IMPORT_DONE)
+        ld hl, (CMS_IMPORT_DONE)
         call print_hex_word
         ld hl, msg_import_remain_len
         call print_string
-        ld hl, (M4S_IMPORT_REMAIN)
+        ld hl, (CMS_IMPORT_REMAIN)
         call print_hex_word
         ld hl, msg_newline
         call print_string
@@ -1271,7 +1271,7 @@ debug_print_done:
 import_prepend_saved_header:
         push hl
         push de
-        ld hl, M4S_IMPORT_HEADER
+        ld hl, CMS_IMPORT_HEADER
         call import_prepend_header_request
         jr nc, import_prepend_saved_header_failed
         pop de
@@ -1292,10 +1292,10 @@ import_decrease_remaining:
         push af
         ld e, a
         ld d, 0
-        ld hl, (M4S_IMPORT_REMAIN)
+        ld hl, (CMS_IMPORT_REMAIN)
         or a
         sbc hl, de
-        ld (M4S_IMPORT_REMAIN), hl
+        ld (CMS_IMPORT_REMAIN), hl
         pop af
         pop bc
         pop de
@@ -1309,10 +1309,10 @@ import_decrease_block:
         push af
         ld e, a
         ld d, 0
-        ld hl, (M4S_IMPORT_BLOCK)
+        ld hl, (CMS_IMPORT_BLOCK)
         or a
         sbc hl, de
-        ld (M4S_IMPORT_BLOCK), hl
+        ld (CMS_IMPORT_BLOCK), hl
         pop af
         pop bc
         pop de
@@ -1321,7 +1321,7 @@ import_decrease_block:
 
 import_load_buffer_base:
         push de
-        ld hl, (M4S_IMPORT_FILEHEAD)
+        ld hl, (CMS_IMPORT_FILEHEAD)
         inc hl
         ld e, (hl)
         inc hl
@@ -1338,7 +1338,7 @@ import_prepare_next_read:
         push de
         push bc
         push iy
-        ld hl, (M4S_IMPORT_REMAIN)
+        ld hl, (CMS_IMPORT_REMAIN)
         ld a, h
         cp 8
         jr c, import_prepare_short
@@ -1350,7 +1350,7 @@ import_prepare_short:
         ld c, l
 
 import_prepare_have_size:
-        ld iy, (M4S_IMPORT_FILEHEAD)
+        ld iy, (CMS_IMPORT_FILEHEAD)
         ld l, (iy+1)
         ld h, (iy+2)
         add hl, bc
@@ -1400,21 +1400,21 @@ rsx_diskwrite:
 rsx_diskwrite_one_param:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = shared source descriptor.
-        ld (M4S_IMPORT_SRC_DESC), hl
+        ld (CMS_IMPORT_SRC_DESC), hl
         ld hl, 0                         ; Derive disk name from source leaf.
-        ld (M4S_IMPORT_DST_DESC), hl
+        ld (CMS_IMPORT_DST_DESC), hl
         jr rsx_diskwrite_have_params
 
 rsx_diskwrite_two_params:
         ld l, (ix+2)
         ld h, (ix+3)                     ; HL = shared source descriptor.
-        ld (M4S_IMPORT_SRC_DESC), hl
+        ld (CMS_IMPORT_SRC_DESC), hl
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = disk destination descriptor.
-        ld (M4S_IMPORT_DST_DESC), hl
+        ld (CMS_IMPORT_DST_DESC), hl
 
 rsx_diskwrite_have_params:
-        ld hl, (M4S_IMPORT_SRC_DESC)
+        ld hl, (CMS_IMPORT_SRC_DESC)
         ld a, (hl)
         or a
         jr nz, rsx_diskwrite_source_nonempty
@@ -1423,7 +1423,7 @@ rsx_diskwrite_have_params:
         ret
 
 rsx_diskwrite_source_nonempty:
-        ld hl, (M4S_IMPORT_DST_DESC)
+        ld hl, (CMS_IMPORT_DST_DESC)
         ld a, h
         or l
         jr z, rsx_diskwrite_nonempty
@@ -1436,16 +1436,16 @@ rsx_diskwrite_source_nonempty:
 
 rsx_diskwrite_nonempty:
         xor a
-        ld (M4S_PROGRESS_SEEN), a
+        ld (CMS_PROGRESS_SEEN), a
         ld a, 4
-        ld (M4S_DISKWRITE_PROGRESS), a
+        ld (CMS_DISKWRITE_PROGRESS), a
         ld de, 0                         ; DE = shared source file offset.
         call diskwrite_request_chunk
         jp nc, rsx_diskwrite_error
 
         call diskwrite_prepare_output_name
         jp nc, rsx_diskwrite_error
-        ld de, M4S_DISC_BUFFER
+        ld de, CMS_DISC_BUFFER
         push ix
         call CAS_OUT_OPEN
         pop ix
@@ -1455,13 +1455,13 @@ rsx_diskwrite_nonempty:
         call print_progress_prefix
         pop hl
         push hl
-        ld hl, (M4S_DISKWRITE_LOGICAL)
+        ld hl, (CMS_DISKWRITE_LOGICAL)
         call progress_init
         pop hl
-        ld (M4S_DISKWRITE_HEADER), hl
+        ld (CMS_DISKWRITE_HEADER), hl
         call diskwrite_update_header
         ld de, 0                         ; DE = shared source file offset.
-        ld bc, (M4S_DISKWRITE_COUNT)
+        ld bc, (CMS_DISKWRITE_COUNT)
         jp rsx_diskwrite_count_valid
 
 rsx_diskwrite_chunk:
@@ -1470,54 +1470,54 @@ rsx_diskwrite_chunk:
         jp rsx_diskwrite_count_valid
 
 diskwrite_request_chunk:
-        call m4diskwrite_send_request
+        call cms_diskwrite_send_request
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        call m4load_read_byte
+        call cms_load_read_byte
         jp nc, diskwrite_request_failed
         ld c, a
-        call m4load_read_byte
+        call cms_load_read_byte
         jp nc, diskwrite_request_failed
         ld b, a                          ; BC = returned byte count.
-        ld (M4S_DISKWRITE_COUNT), bc
+        ld (CMS_DISKWRITE_COUNT), bc
 
-        call m4load_read_byte            ; Read AMSDOS logical length low byte.
+        call cms_load_read_byte            ; Read AMSDOS logical length low byte.
         jp nc, diskwrite_request_failed
         ld l, a
-        call m4load_read_byte            ; Read AMSDOS logical length high byte.
+        call cms_load_read_byte            ; Read AMSDOS logical length high byte.
         jp nc, diskwrite_request_failed
         ld h, a
-        ld (M4S_DISKWRITE_LOGICAL), hl
+        ld (CMS_DISKWRITE_LOGICAL), hl
 
-        call m4load_read_byte            ; Read AMSDOS load address low byte.
+        call cms_load_read_byte            ; Read AMSDOS load address low byte.
         jp nc, diskwrite_request_failed
         ld l, a
-        call m4load_read_byte            ; Read AMSDOS load address high byte.
+        call cms_load_read_byte            ; Read AMSDOS load address high byte.
         jp nc, diskwrite_request_failed
         ld h, a
-        ld (M4S_DISKWRITE_LOAD), hl
+        ld (CMS_DISKWRITE_LOAD), hl
 
-        call m4load_read_byte            ; Read AMSDOS entry address low byte.
+        call cms_load_read_byte            ; Read AMSDOS entry address low byte.
         jp nc, diskwrite_request_failed
         ld l, a
-        call m4load_read_byte            ; Read AMSDOS entry address high byte.
+        call cms_load_read_byte            ; Read AMSDOS entry address high byte.
         jp nc, diskwrite_request_failed
         ld h, a
-        ld (M4S_DISKWRITE_ENTRY), hl
+        ld (CMS_DISKWRITE_ENTRY), hl
 
-        call m4load_read_byte            ; Read AMSDOS type byte.
+        call cms_load_read_byte            ; Read AMSDOS type byte.
         jp nc, diskwrite_request_failed
-        ld (M4S_DISKWRITE_TYPE), a
+        ld (CMS_DISKWRITE_TYPE), a
         ld b, 128
 
 diskwrite_read_header_loop:
-        call m4load_read_byte
+        call cms_load_read_byte
         jp nc, diskwrite_request_failed
         djnz diskwrite_read_header_loop
-        ld bc, (M4S_DISKWRITE_COUNT)
+        ld bc, (CMS_DISKWRITE_COUNT)
         scf
         ret
 
@@ -1541,25 +1541,25 @@ rsx_diskwrite_count_checked:
         jp z, rsx_diskwrite_close_done
 
 rsx_diskwrite_byte_loop:
-        call m4load_read_byte
+        call cms_load_read_byte
         jp nc, rsx_diskwrite_close_error
-        ld (M4S_DISKWRITE_BYTE), a
+        ld (CMS_DISKWRITE_BYTE), a
 
         push bc
         push de
         push ix
-        ld a, (M4S_DISKWRITE_BYTE)
+        ld a, (CMS_DISKWRITE_BYTE)
         call CAS_OUT_CHAR
         ld a, 0
         jr c, rsx_diskwrite_char_ok
         inc a
 
 rsx_diskwrite_char_ok:
-        ld (M4S_DISKWRITE_STATUS), a
+        ld (CMS_DISKWRITE_STATUS), a
         pop ix
         pop de
         pop bc
-        ld a, (M4S_DISKWRITE_STATUS)
+        ld a, (CMS_DISKWRITE_STATUS)
         or a
         jp nz, rsx_diskwrite_close_error
 
@@ -1576,7 +1576,7 @@ rsx_diskwrite_char_ok:
         jp rsx_diskwrite_chunk
 
 rsx_diskwrite_close_done:
-        ld (M4S_IMPORT_DONE), de
+        ld (CMS_IMPORT_DONE), de
         push ix
         call CAS_OUT_CLOSE
         pop ix
@@ -1602,10 +1602,10 @@ diskwrite_update_header:
         push de
         push bc
         push af
-        ld hl, (M4S_DISKWRITE_HEADER)
+        ld hl, (CMS_DISKWRITE_HEADER)
         ld de, 18
         add hl, de
-        ld a, (M4S_DISKWRITE_TYPE)
+        ld a, (CMS_DISKWRITE_TYPE)
         ld (hl), a
         inc hl
         xor a
@@ -1613,22 +1613,22 @@ diskwrite_update_header:
         inc hl
         ld (hl), a                        ; Data length high.
         inc hl
-        ld de, (M4S_DISKWRITE_LOAD)
+        ld de, (CMS_DISKWRITE_LOAD)
         ld (hl), e
         inc hl
         ld (hl), d
         inc hl
         inc hl                            ; Logical length at header+24.
-        ld de, (M4S_DISKWRITE_LOGICAL)
+        ld de, (CMS_DISKWRITE_LOGICAL)
         ld (hl), e
         inc hl
         ld (hl), d
         inc hl
-        ld bc, (M4S_DISKWRITE_ENTRY)
+        ld bc, (CMS_DISKWRITE_ENTRY)
         ld (hl), c
         inc hl
         ld (hl), b
-        ld hl, (M4S_DISKWRITE_HEADER)
+        ld hl, (CMS_DISKWRITE_HEADER)
         ld de, 64
         add hl, de
         xor a
@@ -1637,10 +1637,10 @@ diskwrite_update_header:
         ld (hl), a                        ; Real length middle.
         inc hl
         ld (hl), a                        ; Real length high.
-        ld hl, (M4S_DISKWRITE_HEADER)
+        ld hl, (CMS_DISKWRITE_HEADER)
         ld de, 24
         add hl, de
-        ld de, (M4S_DISKWRITE_LOGICAL)
+        ld de, (CMS_DISKWRITE_LOGICAL)
         ld (hl), e                        ; Logical length low.
         inc hl
         ld (hl), d                        ; Logical length high.
@@ -1656,7 +1656,7 @@ diskwrite_update_checksum:
         push de
         push bc
         ld hl, 0
-        ld de, (M4S_DISKWRITE_HEADER)
+        ld de, (CMS_DISKWRITE_HEADER)
         ld b, 67
 
 diskwrite_checksum_loop:
@@ -1669,7 +1669,7 @@ diskwrite_checksum_loop:
         pop bc
         djnz diskwrite_checksum_loop
         ex de, hl                         ; DE = checksum, HL = header+67.
-        ld hl, (M4S_DISKWRITE_HEADER)
+        ld hl, (CMS_DISKWRITE_HEADER)
         ld bc, 67
         add hl, bc
         ld (hl), e
@@ -1681,28 +1681,28 @@ diskwrite_checksum_loop:
         ret
 
 import_create_destination:
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "F"
         out (c), a
         ld a, ":"
         out (c), a
 
-        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
+        ld hl, (CMS_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         call mv_send_descriptor
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        call m4load_read_byte
+        call cms_load_read_byte
         jp nc, import_response_failed
         cp "O"
         jp nz, import_response_failed_print
@@ -1755,11 +1755,11 @@ import_prepend_header_half:
         push hl
         push af
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "Y"
         out (c), a
         ld a, ":"
@@ -1769,11 +1769,11 @@ import_prepend_header_half:
         ld a, ":"
         out (c), a
 
-        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
+        ld hl, (CMS_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         call mv_send_descriptor
 
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop hl
@@ -1781,20 +1781,20 @@ import_prepend_header_half:
 
 import_prepend_header_data:
         ld a, (hl)
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         inc hl
         dec e
         jr nz, import_prepend_header_data
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        call m4load_read_byte
+        call cms_load_read_byte
         jp nc, import_response_failed
         cp "O"
         jp nz, import_response_failed
@@ -1806,7 +1806,7 @@ import_prepend_header_data:
 import_send_chunk_request:
         push af
         ld a, "S"
-        ld (M4S_IMPORT_REQ_TYPE), a
+        ld (CMS_IMPORT_REQ_TYPE), a
         pop af
         jr import_send_typed_chunk_request
 
@@ -1815,7 +1815,7 @@ import_send_chunk_request:
 import_patch_chunk_request:
         push af
         ld a, "W"
-        ld (M4S_IMPORT_REQ_TYPE), a
+        ld (CMS_IMPORT_REQ_TYPE), a
         pop af
 
 import_send_typed_chunk_request:
@@ -1824,34 +1824,34 @@ import_send_typed_chunk_request:
         push bc
         push af
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
-        ld a, (M4S_IMPORT_REQ_TYPE)
+        ld bc, CMS_PORT_DATA
+        ld a, (CMS_IMPORT_REQ_TYPE)
         out (c), a
         ld a, ":"
         out (c), a
         ld a, d
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, e
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop af
         push af
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld hl, (M4S_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
+        ld hl, (CMS_IMPORT_DST_DESC)      ; HL = shared destination descriptor.
         call mv_send_descriptor
 
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop af
@@ -1867,13 +1867,13 @@ import_send_typed_chunk_request:
 
 import_send_chunk_data:
         ld a, (hl)
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         inc hl
         dec e
         jr nz, import_send_chunk_data
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop af
@@ -1881,11 +1881,11 @@ import_send_chunk_data:
         pop de
         pop hl
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        call m4load_read_byte
+        call cms_load_read_byte
         jp nc, import_response_failed
         cp "O"
         jp nz, import_response_failed
@@ -1899,91 +1899,91 @@ import_send_chunk_data:
 ; shared folder.  The CPC sends 64-byte chunks encoded as ASCII hex so the
 ; current zero-terminated mailbox request framing can carry arbitrary bytes.
 ; ---------------------------------------------------------------------------
-rsx_m4save:
+rsx_savem:
         cp 3
-        jr z, rsx_m4save_have_params
+        jr z, rsx_savem_have_params
         ld hl, msg_save_usage
         call print_string
         ret
 
-rsx_m4save_have_params:
+rsx_savem_have_params:
         ld l, (ix+4)
         ld h, (ix+5)                     ; HL = filename string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4save_nonempty
+        jr nz, rsx_savem_nonempty
         ld hl, msg_save_usage
         call print_string
         ret
 
-rsx_m4save_nonempty:
+rsx_savem_nonempty:
         ld l, (ix+2)
         ld h, (ix+3)                     ; HL = source memory pointer.
         ld c, (ix+0)
         ld b, (ix+1)                     ; BC = bytes left to save.
         ld a, b
         or c
-        jr nz, rsx_m4save_start
+        jr nz, rsx_savem_start
         ld hl, msg_save_usage
         call print_string
         ret
 
-rsx_m4save_start:
+rsx_savem_start:
         ld de, 0                         ; DE = file offset for next chunk.
 
-rsx_m4save_chunk:
+rsx_savem_chunk:
         ld a, b
         or a
-        jr nz, rsx_m4save_chunk_64
+        jr nz, rsx_savem_chunk_64
         ld a, c
         cp 65
-        jr c, rsx_m4save_chunk_ready
+        jr c, rsx_savem_chunk_ready
 
-rsx_m4save_chunk_64:
+rsx_savem_chunk_64:
         ld a, 64
 
-rsx_m4save_chunk_ready:
-        call m4save_send_request
+rsx_savem_chunk_ready:
+        call cmsave_send_request
         push af
 
         push bc
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
         pop bc
 
-        call m4load_read_byte
-        jr nc, rsx_m4save_response_error
+        call cms_load_read_byte
+        jr nc, rsx_savem_response_error
         cp "O"
-        jr nz, rsx_m4save_response_error
+        jr nz, rsx_savem_response_error
 
         pop af
-rsx_m4save_advance:
+rsx_savem_advance:
         inc hl
         inc de
         dec bc
         dec a
-        jr nz, rsx_m4save_advance
+        jr nz, rsx_savem_advance
 
         ld a, b
         or c
-        jr z, rsx_m4save_done
+        jr z, rsx_savem_done
 
         ld a, d                          ; Stop if the 16-bit proof offset
         or e                             ; wraps around at 64KB.
-        jr z, rsx_m4save_error
+        jr z, rsx_savem_error
 
-        jr rsx_m4save_chunk
+        jr rsx_savem_chunk
 
-rsx_m4save_response_error:
+rsx_savem_response_error:
         pop af
 
-rsx_m4save_error:
+rsx_savem_error:
         ld hl, msg_save_error
         call print_string
         ret
 
-rsx_m4save_done:
+rsx_savem_done:
         ld hl, msg_save_done
         call print_string
         ret
@@ -1995,107 +1995,107 @@ rsx_m4save_done:
 ; folder into CPC RAM at &4000 in 512-byte chunks.  Each chunk response starts
 ; with a little-endian 16-bit byte count followed by raw file data.
 ; ---------------------------------------------------------------------------
-rsx_m4load:
+rsx_loadm:
         cp 1
-        jr z, rsx_m4load_one_param
+        jr z, rsx_loadm_one_param
         cp 2
-        jr z, rsx_m4load_two_params
+        jr z, rsx_loadm_two_params
         ld hl, msg_load_usage
         call print_string
         ret
 
-rsx_m4load_one_param:
+rsx_loadm_one_param:
         ld iy, 0                         ; Filename descriptor is at IX+0.
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4load_nonempty
+        jr nz, rsx_loadm_nonempty
         ld hl, msg_load_usage
         call print_string
         ret
 
-rsx_m4load_two_params:
+rsx_loadm_two_params:
         ld iy, 1                         ; Filename descriptor is at IX+2.
         ld l, (ix+2)
         ld h, (ix+3)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4load_nonempty
+        jr nz, rsx_loadm_nonempty
         ld hl, msg_load_usage
         call print_string
         ret
 
-rsx_m4load_nonempty:
+rsx_loadm_nonempty:
         push iy
         pop bc
         ld a, b
         or c
-        jr z, rsx_m4load_default_addr
+        jr z, rsx_loadm_default_addr
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = destination pointer.
         ld a, h
         cp &40
-        jr c, rsx_m4load_error
-        jr rsx_m4load_addr_ready
+        jr c, rsx_loadm_error
+        jr rsx_loadm_addr_ready
 
-rsx_m4load_default_addr:
-        ld hl, M4S_LOAD_ADDR             ; HL = default destination pointer.
+rsx_loadm_default_addr:
+        ld hl, CMS_LOAD_ADDR             ; HL = default destination pointer.
 
-rsx_m4load_addr_ready:
+rsx_loadm_addr_ready:
         ld de, 0                         ; DE = file offset for next chunk.
 
-rsx_m4load_chunk:
-        call m4load_send_request
+rsx_loadm_chunk:
+        call cms_load_send_request
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        call m4load_read_byte
-        jp nc, rsx_m4load_error
+        call cms_load_read_byte
+        jp nc, rsx_loadm_error
         ld c, a
-        call m4load_read_byte
-        jp nc, rsx_m4load_error
+        call cms_load_read_byte
+        jp nc, rsx_loadm_error
         ld b, a                          ; BC = returned byte count.
 
         ld a, b
         cp 3
-        jr nc, rsx_m4load_error          ; Refuse counts above 512 bytes.
+        jr nc, rsx_loadm_error          ; Refuse counts above 512 bytes.
         cp 2
-        jr nz, rsx_m4load_count_valid
+        jr nz, rsx_loadm_count_valid
         ld a, c
         or a
-        jp nz, rsx_m4load_error
+        jp nz, rsx_loadm_error
 
-rsx_m4load_count_valid:
+rsx_loadm_count_valid:
         ld a, b
         or c
-        jr z, rsx_m4load_done
+        jr z, rsx_loadm_done
 
-rsx_m4load_write_loop:
-        call m4load_read_byte
-        jp nc, rsx_m4load_error
+rsx_loadm_write_loop:
+        call cms_load_read_byte
+        jp nc, rsx_loadm_error
         ld (hl), a
         inc hl
         inc de
         dec bc
         ld a, b
         or c
-        jr nz, rsx_m4load_write_loop
+        jr nz, rsx_loadm_write_loop
 
         ld a, d                          ; Stop if the 16-bit proof offset
         or e                             ; wraps around at 64KB.
-        jr z, rsx_m4load_done
+        jr z, rsx_loadm_done
 
-        jr rsx_m4load_chunk
+        jr rsx_loadm_chunk
 
-rsx_m4load_done:
+rsx_loadm_done:
         ld hl, msg_load_done
         call print_string
         ret
 
-rsx_m4load_error:
+rsx_loadm_error:
         ld hl, msg_load_error
         call print_string
         ret
@@ -2107,104 +2107,104 @@ rsx_m4load_error:
 ; address, and jumps to the AMSDOS entry address.  This is deliberately separate
 ; from loadm because it may write to low memory.
 ; ---------------------------------------------------------------------------
-rsx_m4loadh:
+rsx_exec:
         cp 1
-        jr z, rsx_m4loadh_have_param
+        jr z, rsx_exec_have_param
         ld hl, msg_loadh_usage
         call print_string
         ret
 
-rsx_m4loadh_have_param:
+rsx_exec_have_param:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
         ld a, (hl)                       ; A = string length.
         or a
-        jr nz, rsx_m4loadh_nonempty
+        jr nz, rsx_exec_nonempty
         ld hl, msg_loadh_usage
         call print_string
         ret
 
-rsx_m4loadh_nonempty:
-        call m4exec_check_request
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+rsx_exec_nonempty:
+        call cms_exec_check_request
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
-        call m4load_read_byte
-        jp nc, rsx_m4load_error
+        call cms_load_read_byte
+        jp nc, rsx_loadm_error
         cp 1
-        jp nz, rsx_m4load_error
+        jp nz, rsx_loadm_error
 
         push ix
-        call rsx_m4info_have_param
+        call rsx_stat_have_param
         ld hl, msg_loadh_prompt
         call print_string
         call KM_WAIT_CHAR
         cp "Y"
-        jr z, rsx_m4loadh_confirmed
+        jr z, rsx_exec_confirmed
         cp "y"
-        jr z, rsx_m4loadh_confirmed
+        jr z, rsx_exec_confirmed
         pop ix
         ld hl, msg_loadh_cancelled
         call print_string
         ret
 
-rsx_m4loadh_confirmed:
+rsx_exec_confirmed:
         pop ix
         ld hl, 0                         ; HL = destination pointer, filled
                                          ; from the first response header.
         ld de, 0                         ; DE = file offset for next chunk.
         ld iy, 0                         ; IY = entry address.
 
-rsx_m4loadh_chunk:
-        call m4loadh_send_request
+rsx_exec_chunk:
+        call cms_exech_send_request
 
-        ld a, M4S_CMD_TYPE
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_TYPE
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        call m4load_read_byte
-        jr nc, rsx_m4load_error
+        call cms_load_read_byte
+        jr nc, rsx_loadm_error
         ld c, a
-        call m4load_read_byte
-        jr nc, rsx_m4load_error
+        call cms_load_read_byte
+        jr nc, rsx_loadm_error
         ld b, a                          ; BC = returned payload byte count.
 
         ld a, b
         cp 3
-        jp nc, rsx_m4load_error          ; Refuse counts above 512 bytes.
+        jp nc, rsx_loadm_error          ; Refuse counts above 512 bytes.
         cp 2
-        jr nz, rsx_m4loadh_count_valid
+        jr nz, rsx_exec_count_valid
         ld a, c
         or a
-        jp nz, rsx_m4load_error
+        jp nz, rsx_loadm_error
 
-rsx_m4loadh_count_valid:
-        call m4load_read_byte            ; Read AMSDOS load address low byte.
-        jp nc, rsx_m4load_error
+rsx_exec_count_valid:
+        call cms_load_read_byte            ; Read AMSDOS load address low byte.
+        jp nc, rsx_loadm_error
         push af
-        call m4load_read_byte            ; Read AMSDOS load address high byte.
-        jp nc, rsx_m4load_error
+        call cms_load_read_byte            ; Read AMSDOS load address high byte.
+        jp nc, rsx_loadm_error
         push af
         ld a, d
         or e
-        jr nz, rsx_m4loadh_drop_load_addr
+        jr nz, rsx_exec_drop_load_addr
         pop af
         ld h, a
         pop af
         ld l, a
-        jr rsx_m4loadh_read_entry
+        jr rsx_exec_read_entry
 
-rsx_m4loadh_drop_load_addr:
+rsx_exec_drop_load_addr:
         pop af
         pop af
 
-rsx_m4loadh_read_entry:
+rsx_exec_read_entry:
         push hl
-        call m4load_read_byte            ; Read AMSDOS entry address low byte.
-        jp nc, rsx_m4load_error
+        call cms_load_read_byte            ; Read AMSDOS entry address low byte.
+        jp nc, rsx_loadm_error
         push af
-        call m4load_read_byte            ; Read AMSDOS entry address high byte.
-        jp nc, rsx_m4load_error
+        call cms_load_read_byte            ; Read AMSDOS entry address high byte.
+        jp nc, rsx_loadm_error
         ld h, a
         pop af
         ld l, a
@@ -2212,54 +2212,54 @@ rsx_m4loadh_read_entry:
         pop iy
         pop hl
 
-        call m4load_read_byte            ; Read AMSDOS type byte.
-        jp nc, rsx_m4load_error
+        call cms_load_read_byte            ; Read AMSDOS type byte.
+        jp nc, rsx_loadm_error
         push af
 
         ld a, b
         or c
-        jr z, rsx_m4loadh_done
+        jr z, rsx_exec_done
 
         pop af
-rsx_m4loadh_write_loop:
-        call m4load_read_byte
-        jp nc, rsx_m4load_error
+rsx_exec_write_loop:
+        call cms_load_read_byte
+        jp nc, rsx_loadm_error
         ld (hl), a
         inc hl
         inc de
         dec bc
         ld a, b
         or c
-        jr nz, rsx_m4loadh_write_loop
+        jr nz, rsx_exec_write_loop
 
         ld a, d
         or e
-        jp z, rsx_m4load_done
+        jp z, rsx_loadm_done
 
-        jr rsx_m4loadh_chunk
+        jr rsx_exec_chunk
 
-rsx_m4loadh_done:
+rsx_exec_done:
         pop af
         cp &00                           ; BASIC: load only, then user can RUN.
-        jp z, rsx_m4loadh_basic_done
+        jp z, rsx_exec_basic_done
         cp &01                           ; Protected BASIC: load only too.
-        jp z, rsx_m4loadh_basic_done
+        jp z, rsx_exec_basic_done
         cp &02                           ; Binary: jump if an entry exists.
-        jp nz, rsx_m4load_done
+        jp nz, rsx_loadm_done
         push iy
         pop hl
         ld a, h
         or l
-        jp z, rsx_m4load_done
+        jp z, rsx_loadm_done
         jp (hl)
 
-rsx_m4loadh_basic_done:
+rsx_exec_basic_done:
         ld hl, msg_loadh_basic_done
         call print_string
         ret
 
 ; Read one mailbox byte while preserving the active chunk state in HL/BC/DE.
-m4load_read_byte:
+cms_load_read_byte:
         push hl
         push bc
         push de
@@ -2270,106 +2270,106 @@ m4load_read_byte:
         ret
 
 ; Send request "L:OOOO:filename", where OOOO is the 16-bit file offset in DE.
-m4load_send_request:
+cms_load_send_request:
         push hl
         push de
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "L"
         out (c), a
         ld a, ":"
         out (c), a
         ld a, d
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, e
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         push iy
         pop hl
         ld a, h
         or l
-        jr z, m4load_send_filename_at_ix0
+        jr z, cms_load_send_filename_at_ix0
 
         ld l, (ix+2)
         ld h, (ix+3)                     ; HL = string descriptor.
-        jr m4load_send_filename_descriptor
+        jr cms_load_send_filename_descriptor
 
-m4load_send_filename_at_ix0:
+cms_load_send_filename_at_ix0:
         ld l, (ix+0)
         ld h, (ix+1)                     ; HL = string descriptor.
 
-m4load_send_filename_descriptor:
+cms_load_send_filename_descriptor:
         ld b, (hl)                       ; B = filename length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)                       ; DE = filename data.
 
-m4load_send_name:
+cms_load_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz m4load_send_name
+        djnz cms_load_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop de
         pop hl
         ret
 
-m4load_send_hex_byte:
+cms_load_send_hex_byte:
         push af
         rrca
         rrca
         rrca
         rrca
-        call m4load_send_hex_nibble
+        call cms_load_send_hex_nibble
         pop af
 
-m4load_send_hex_nibble:
+cms_load_send_hex_nibble:
         and &0F
         add a, "0"
         cp "9" + 1
-        jr c, m4load_send_hex_digit
+        jr c, cms_load_send_hex_digit
         add a, 7
 
-m4load_send_hex_digit:
-        ld bc, M4S_PORT_DATA
+cms_load_send_hex_digit:
+        ld bc, CMS_PORT_DATA
         out (c), a
         ret
 
 ; Send request "H:OOOO:filename", where OOOO is the payload offset in DE.
-m4loadh_send_request:
+cms_exech_send_request:
         push hl
         push de
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "H"
         out (c), a
         ld a, ":"
         out (c), a
         ld a, d
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, e
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         ld l, (ix+0)
@@ -2380,17 +2380,17 @@ m4loadh_send_request:
         inc hl
         ld d, (hl)                       ; DE = filename data.
 
-m4loadh_send_name:
+cms_exech_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz m4loadh_send_name
+        djnz cms_exech_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop de
@@ -2398,15 +2398,15 @@ m4loadh_send_name:
         ret
 
 ; Send request "X:filename" to check that |exec can load the file.
-m4exec_check_request:
+cms_exec_check_request:
         push hl
         push de
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "X"
         out (c), a
         ld a, ":"
@@ -2420,17 +2420,17 @@ m4exec_check_request:
         inc hl
         ld d, (hl)                       ; DE = filename data.
 
-m4exec_check_name:
+cms_exec_check_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz m4exec_check_name
+        djnz cms_exec_check_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop de
@@ -2438,45 +2438,45 @@ m4exec_check_name:
         ret
 
 ; Send request "O:OOOO:filename" using the saved shared source descriptor.
-m4diskwrite_send_request:
+cms_diskwrite_send_request:
         push hl
         push de
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "O"
         out (c), a
         ld a, ":"
         out (c), a
         ld a, d
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, e
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
-        ld hl, (M4S_IMPORT_SRC_DESC)      ; HL = shared source descriptor.
+        ld hl, (CMS_IMPORT_SRC_DESC)      ; HL = shared source descriptor.
         ld b, (hl)                       ; B = filename length.
         inc hl
         ld e, (hl)
         inc hl
         ld d, (hl)                       ; DE = filename data.
 
-m4diskwrite_send_name:
+cms_diskwrite_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz m4diskwrite_send_name
+        djnz cms_diskwrite_send_name
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop de
@@ -2484,7 +2484,7 @@ m4diskwrite_send_name:
         ret
 
 diskwrite_prepare_output_name:
-        ld hl, (M4S_IMPORT_DST_DESC)
+        ld hl, (CMS_IMPORT_DST_DESC)
         ld a, h
         or l
         jr z, diskwrite_source_leaf_name
@@ -2498,7 +2498,7 @@ diskwrite_prepare_output_name:
         ret
 
 diskwrite_source_leaf_name:
-        ld hl, (M4S_IMPORT_SRC_DESC)
+        ld hl, (CMS_IMPORT_SRC_DESC)
         ld b, (hl)                       ; B = full source path length.
         inc hl
         ld e, (hl)
@@ -2541,33 +2541,33 @@ diskwrite_leaf_failed:
 
 ; Send request "S:OOOO:NN:filename:HEX", where OOOO is the 16-bit file offset
 ; in DE and NN is the chunk length in A.
-m4save_send_request:
+cmsave_send_request:
         push hl
         push de
         push bc
         push af
 
-        ld a, M4S_CMD_REQ_BEGIN
-        ld bc, M4S_PORT_COMMAND
+        ld a, CMS_CMD_REQ_BEGIN
+        ld bc, CMS_PORT_COMMAND
         out (c), a
 
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         ld a, "S"
         out (c), a
         ld a, ":"
         out (c), a
         ld a, d
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, e
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop af
         push af
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         ld l, (ix+4)
@@ -2578,17 +2578,17 @@ m4save_send_request:
         inc hl
         ld d, (hl)                       ; DE = filename data.
 
-m4save_send_name:
+cmsave_send_name:
         ld a, (de)
         push bc
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
         pop bc
         inc de
-        djnz m4save_send_name
+        djnz cmsave_send_name
 
         ld a, ":"
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop af
@@ -2602,15 +2602,15 @@ m4save_send_name:
 
         ld e, a
 
-m4save_send_data:
+cmsave_send_data:
         ld a, (hl)
-        call m4load_send_hex_byte
+        call cms_load_send_hex_byte
         inc hl
         dec e
-        jr nz, m4save_send_data
+        jr nz, cmsave_send_data
 
         xor a
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         out (c), a
 
         pop af
@@ -2631,7 +2631,7 @@ mailbox_wait_outer:
         ld de, 0
 
 mailbox_wait:
-        ld bc, M4S_PORT_STATUS
+        ld bc, CMS_PORT_STATUS
         in a, (c)
         bit 3, a                         ; ERROR.
         jr nz, mailbox_no_byte
@@ -2655,7 +2655,7 @@ mailbox_no_byte:
         ret
 
 mailbox_get_byte:
-        ld bc, M4S_PORT_DATA
+        ld bc, CMS_PORT_DATA
         in a, (c)
         scf
         ret
@@ -2697,16 +2697,16 @@ print_hex_digit:
         ret
 
 print_progress_prefix:
-        ld a, (M4S_DEBUG_MODE)
+        ld a, (CMS_DEBUG_MODE)
         or a
         ret nz
         ld a, 1
-        ld (M4S_PROGRESS_SEEN), a
+        ld (CMS_PROGRESS_SEEN), a
         call print_string
         ret
 
 progress_init:
-        ld a, (M4S_DEBUG_MODE)
+        ld a, (CMS_DEBUG_MODE)
         or a
         ret nz
         ld a, h
@@ -2728,31 +2728,31 @@ progress_init_blocks_ready:
 
 progress_init_nonzero:
         ld a, c
-        ld (M4S_PROGRESS_TOTAL), a
+        ld (CMS_PROGRESS_TOTAL), a
         xor a
-        ld (M4S_PROGRESS_DONE), a
+        ld (CMS_PROGRESS_DONE), a
         call progress_print_percent
         ret
 
 diskwrite_progress_chunk:
-        ld a, (M4S_DISKWRITE_PROGRESS)
+        ld a, (CMS_DISKWRITE_PROGRESS)
         dec a
         jr z, diskwrite_progress_dot
-        ld (M4S_DISKWRITE_PROGRESS), a
+        ld (CMS_DISKWRITE_PROGRESS), a
         ret
 
 diskwrite_progress_dot:
         ld a, 4
-        ld (M4S_DISKWRITE_PROGRESS), a
+        ld (CMS_DISKWRITE_PROGRESS), a
         call progress_update
         ret
 
 diskwrite_progress_flush:
-        ld hl, (M4S_IMPORT_DONE)
+        ld hl, (CMS_IMPORT_DONE)
         ld a, h
         or l
         ret z
-        ld a, (M4S_DISKWRITE_PROGRESS)
+        ld a, (CMS_DISKWRITE_PROGRESS)
         cp 4
         ret z
         call progress_update
@@ -2762,17 +2762,17 @@ progress_update:
         push hl
         push de
         push bc
-        ld a, (M4S_DEBUG_MODE)
+        ld a, (CMS_DEBUG_MODE)
         or a
         jr nz, progress_update_done
-        ld a, (M4S_PROGRESS_DONE)
+        ld a, (CMS_PROGRESS_DONE)
         ld c, a
-        ld a, (M4S_PROGRESS_TOTAL)
+        ld a, (CMS_PROGRESS_TOTAL)
         cp c
         jr z, progress_update_print
         ld a, c
         inc a
-        ld (M4S_PROGRESS_DONE), a
+        ld (CMS_PROGRESS_DONE), a
 
 progress_update_print:
         call progress_backspace_percent
@@ -2798,7 +2798,7 @@ progress_print_percent:
         ret
 
 progress_calculate_percent:
-        ld a, (M4S_PROGRESS_DONE)
+        ld a, (CMS_PROGRESS_DONE)
         ld b, a
         ld hl, 0
         ld de, 100
@@ -2812,7 +2812,7 @@ progress_percent_multiply:
         jr progress_percent_multiply
 
 progress_percent_divide:
-        ld a, (M4S_PROGRESS_TOTAL)
+        ld a, (CMS_PROGRESS_TOTAL)
         ld c, a
         ld b, 0
 
@@ -2885,10 +2885,10 @@ progress_print_tens_done:
         ret
 
 print_progress_newline:
-        ld a, (M4S_DEBUG_MODE)
+        ld a, (CMS_DEBUG_MODE)
         or a
         ret nz
-        ld a, (M4S_PROGRESS_SEEN)
+        ld a, (CMS_PROGRESS_SEEN)
         or a
         ret z
         ld hl, msg_newline
@@ -2896,10 +2896,10 @@ print_progress_newline:
         ret
 
 msg_intro:
-        db " M4S ROM Stage 4.14 installed", 13, 10, 13, 10, 0
+        db " CPC MiSTer Share 4.14 installed", 13, 10, 13, 10, 0
 
 msg_about:
-        db "M4S ROM Stage 4.14", 13, 10
+        db "CPC MiSTer Share 4.14", 13, 10
         db "|about", 13, 10
         db "|cd[,", 34, "DIR", 34, "]", 13, 10
         db "|cp,", 34, "SRC", 34, ",", 34, "DST", 34, 13, 10

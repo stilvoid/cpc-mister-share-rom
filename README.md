@@ -1,4 +1,4 @@
-# CPC MiSTer Shared Folder ROM
+# CPC MiSTer Share ROM
 
 Experimental shared-folder support for the MiSTer Amstrad CPC core.
 
@@ -10,7 +10,7 @@ currently mounted AMSDOS disk.
 The current ROM identifies itself as:
 
 ```text
- M4S ROM Stage 4.14 installed
+ CPC MiSTer Share 4.14 installed
 ```
 
 ## Requirements

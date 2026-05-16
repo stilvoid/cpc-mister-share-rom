@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Experimental CPC MiSTer Mass Storage mailbox scaffold.
-// Not a full M4 clone. This is a tiny CPC-facing test interface.
+// CPC MiSTer Share mailbox.
+// Tiny CPC-facing shared-folder interface.
 
-module m4s_mailbox #(
+module cms_mailbox #(
     parameter int DIR_INDEX_BITS = 11,
     parameter int REQUEST_BITS = 8
 ) (
@@ -50,7 +50,7 @@ module m4s_mailbox #(
     localparam logic [REQUEST_BITS-1:0] REQUEST_LAST = {REQUEST_BITS{1'b1}};
 
     localparam logic [15:0] PING_LEN     = 16'd9;
-    localparam logic [15:0] FALLBACK_LEN = 16'd15;
+    localparam logic [15:0] FALLBACK_LEN = 16'd17;
 
     logic [7:0] status;
     logic [7:0] param_reg;
@@ -90,10 +90,10 @@ module m4s_mailbox #(
 
     function automatic logic [7:0] ping_byte(input logic [7:0] idx);
         begin
-            // "M4S OK\r\n\0"
+            // "CMS OK\r\n\0"
             case (idx)
-                8'd0: ping_byte = "M";
-                8'd1: ping_byte = "4";
+                8'd0: ping_byte = "C";
+                8'd1: ping_byte = "M";
                 8'd2: ping_byte = "S";
                 8'd3: ping_byte = " ";
                 8'd4: ping_byte = "O";
@@ -107,22 +107,24 @@ module m4s_mailbox #(
 
     function automatic logic [7:0] fallback_byte(input logic [15:0] idx);
         begin
-            // "NO M4S INDEX\r\n\0"
+            // "NO SHARE INDEX\r\n\0"
             case (idx)
                 16'd0:  fallback_byte = "N";
                 16'd1:  fallback_byte = "O";
                 16'd2:  fallback_byte = " ";
-                16'd3:  fallback_byte = "M";
-                16'd4:  fallback_byte = "4";
-                16'd5:  fallback_byte = "S";
-                16'd6:  fallback_byte = " ";
-                16'd7:  fallback_byte = "I";
-                16'd8:  fallback_byte = "N";
-                16'd9:  fallback_byte = "D";
-                16'd10: fallback_byte = "E";
-                16'd11: fallback_byte = "X";
-                16'd12: fallback_byte = 8'h0D;
-                16'd13: fallback_byte = 8'h0A;
+                16'd3:  fallback_byte = "S";
+                16'd4:  fallback_byte = "H";
+                16'd5:  fallback_byte = "A";
+                16'd6:  fallback_byte = "R";
+                16'd7:  fallback_byte = "E";
+                16'd8:  fallback_byte = " ";
+                16'd9:  fallback_byte = "I";
+                16'd10: fallback_byte = "N";
+                16'd11: fallback_byte = "D";
+                16'd12: fallback_byte = "E";
+                16'd13: fallback_byte = "X";
+                16'd14: fallback_byte = 8'h0D;
+                16'd15: fallback_byte = 8'h0A;
                 default: fallback_byte = 8'h00;
             endcase
         end

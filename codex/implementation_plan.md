@@ -15,17 +15,17 @@ The Amstrad MiSTer README says the core already supports selectable expansion RO
 
 1. Add or build a 16KB expansion ROM that registers `|HELLO`.
 2. Load it as `boot.eXX` using the existing expansion ROM feature.
-3. Verify `|HELLO` prints: `M4S ROM OK`.
+3. Verify `|HELLO` prints: `CPC MiSTer Share OK`.
 
 Deliverables:
 
-- `rom/m4s_rom.asm` made buildable.
+- `rom/cpc_mister_share_rom.asm` made buildable.
 - `make` produces `build/boot.eXX` or another valid `.eXX` file.
 - Documentation explaining where to copy the ROM on MiSTer.
 
 ## Stage 2: FPGA mailbox
 
-1. Add `rtl/m4s_mailbox.sv` to the Quartus project.
+1. Add `rtl/cms_mailbox.sv` to the Quartus project.
 2. Instantiate it in the appropriate top-level/core module.
 3. Decode experimental I/O ports:
    - `&FBD0` DATA
@@ -55,7 +55,7 @@ Possible routes:
 
 Chosen first route:
 
-- Add a `Load M4S index` menu item using the existing `ioctl_download` path.
+- Add a `Load CMS index` menu item using the existing `ioctl_download` path.
 - Store the downloaded text in a small FPGA RAM buffer.
 - Make `|ls` stream that buffer.
 - If no index has been loaded, return a sane fallback message instead of mock
@@ -63,7 +63,7 @@ Chosen first route:
 
 Acceptance:
 
-- Before loading an index, `|ls` prints `NO M4S INDEX`.
+- Before loading an index, `|ls` prints `NO SHARE INDEX`.
 - After loading a text index, `|ls` prints the downloaded contents.
 
 Second route:

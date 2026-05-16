@@ -1,7 +1,7 @@
 ASM ?= pasmo
 
-ROM_SRC := rom/m4s_rom.asm
-ROM_INC := rom/m4s_protocol.inc
+ROM_SRC := rom/cpc_mister_share_rom.asm
+ROM_INC := rom/cpc_mister_share_protocol.inc
 ROM_OUT ?= build/boot.eXX
 CORE_DIR ?= ../Amstrad_MiSTer
 MAIN_DIR ?= ../Main_MiSTer

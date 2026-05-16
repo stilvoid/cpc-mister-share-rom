@@ -1,32 +1,13 @@
-# CPC MiSTer Mass Storage Protocol Draft
+# CPC MiSTer Share Protocol
 
-This protocol is intentionally small. It is a proposed mailbox between CPC Z80
-code and FPGA logic, designed to be extended later.
+CPC MiSTer Share uses a small mailbox between the CPC Z80, the Amstrad core,
+and Main_MiSTer.  The CPC ROM writes requests to four I/O ports, the FPGA stores
+the request, and the HPS side answers by filling the response stream.
 
-Stage 1 does not use this protocol. The current ROM only registers `|HELLO` and
-prints through the CPC firmware.
+The protocol is intentionally project-specific.  It is not an M4 board protocol
+and does not try to emulate the M4 hardware stack.
 
-## Goals
-
-- Support folder-backed storage from MiSTer in a later stage.
-- Keep FPGA logic small.
-- Keep the CPC ROM easy to debug.
-- Avoid emulating STM32/ESP hardware from the real M4 board.
-
-## Non-goals
-
-- Full M4 compatibility.
-- Network access.
-- Web UI.
-- Firmware flashing.
-- AMSDOS interception in the early stages.
-- Any HPS communication in Stage 1.
-
-## Proposed ports
-
-These ports are reserved as a working proposal for Stage 2 and later. They are
-documented here and in `rom/m4s_protocol.inc`, but Stage 1 ROM code must not
-read or write them.
+## Ports
 
 | Port | Name    | Direction | Meaning |
 |------|---------|-----------|---------|
@@ -35,11 +16,7 @@ read or write them.
 | FBD2 | COMMAND | W         | Command selector, starts transaction |
 | FBD3 | PARAM   | W         | Optional length, page, or argument byte |
 
-Actual port selection must be checked against the current Amstrad core I/O
-decode and CPC expansion conventions before any RTL integration is treated as
-stable.
-
-## STATUS bits
+## Status Bits
 
 ```text
 bit 0: DATA_READY     FPGA has a byte for CPC to read
@@ -50,7 +27,9 @@ bit 4: END_OF_STREAM  No more bytes for current read response
 bit 5-7: reserved
 ```
 
-## Proposed commands
+## ROM Commands
+
+The ROM constants live in `rom/cpc_mister_share_protocol.inc`.
 
 ```text
 00 NOP
@@ -63,55 +42,39 @@ bit 5-7: reserved
 07 SAVE_WRITE
 08 CLOSE
 09 GET_CWD
+0A REQ_BEGIN
+0B TYPE
 ```
 
-## Stage 1 behaviour
+Most current RSX commands use `REQ_BEGIN` followed by an ASCII request string.
+The final `TYPE` command starts the response stream.  Chunked binary operations
+use length-prefixed responses so zero bytes can be transferred safely.
 
-No mailbox behaviour exists in Stage 1.
+## HPS Commands
 
-Implemented ROM behaviour:
-
-```basic
-|HELLO
-```
-
-prints:
+The Amstrad core sends these command bytes over `EXT_BUS` for Main_MiSTer:
 
 ```text
-M4S ROM OK
+70 DIR_BEGIN
+71 DIR_WRITE
+72 REQ_STATUS
+73 REQ_READ
+74 REQ_ACK
+77 RESP_DONE
 ```
 
-## Stage 2 target behaviour
+Main_MiSTer polls pending requests, resolves shared-folder paths using MiSTer's
+normal path precedence, and writes text or binary response bytes back through
+the core.
 
-Stage 2 should prove the mailbox path with a hardcoded response before any host
-filesystem work is attempted.
+## Fallback Responses
 
-Suggested first command:
+The FPGA keeps tiny fallback responses for early bring-up or missing HPS data:
 
 ```text
-01 PING
+CMS OK\r\n\0
+NO SHARE INDEX\r\n\0
 ```
 
-Suggested response:
-
-```text
-M4S OK\r\n\0
-```
-
-Suggested next command:
-
-```text
-02 DIR_BEGIN
-```
-
-Suggested mock response:
-
-```text
-M4S MOCK DIR\r\nREADME.TXT\r\nHELLO.BAS\r\n\0
-```
-
-## Later host-backed behaviour
-
-The FPGA mailbox should eventually hand off command requests to the MiSTer HPS
-side. Prefer keeping file path parsing and filesystem access outside the FPGA
-fabric where possible.
+Normal tester builds should use the live Main_MiSTer path rather than the
+fallback directory index.

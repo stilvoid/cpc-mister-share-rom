@@ -9,7 +9,7 @@ ROM, Amstrad core, and Main_MiSTer binary are installed.
 2. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.14 installed
+ CPC MiSTer Share 4.14 installed
 ```
 
 3. Run:

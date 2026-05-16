@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Small HPS extension bridge for the experimental M4S directory index.
+// Small HPS extension bridge for the experimental CMS directory index.
 
 /* verilator lint_off UNOPTFLAT */
-module m4s_hps_ext #(
+module cms_hps_ext #(
     parameter int DIR_INDEX_BITS = 11
 ) (
     input  logic                      clk,
