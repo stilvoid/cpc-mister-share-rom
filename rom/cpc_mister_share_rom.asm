@@ -2893,7 +2893,7 @@ print_progress_newline:
 msg_intro:
         db " CPC MiSTer Share "
         include "../build/cpc_mister_share_version.inc"
-        db " installed", 13, 10, 13, 10, 0
+        db 13, 10, 13, 10, 0
 
 msg_about:
         db "CPC MiSTer Share "

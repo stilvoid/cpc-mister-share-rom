@@ -10,7 +10,7 @@ currently mounted AMSDOS disk.
 The current ROM identifies itself as:
 
 ```text
- CPC MiSTer Share v0.1 installed
+ CPC MiSTer Share v0.1
 ```
 
 The version string is generated at build time with
