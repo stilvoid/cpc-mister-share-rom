@@ -73,7 +73,7 @@ M4S_DISKWRITE_LOGICAL equ &9819          ; 16-bit AMSDOS output logical length.
 M4S_DISKWRITE_COUNT equ &981B            ; 16-bit current host payload count.
 M4S_DEBUG_MODE equ &981D                 ; Non-zero enables noisy diagnostics.
 M4S_PROGRESS_SEEN equ &981E              ; Non-zero after progress output.
-M4S_PROGRESS_DOTS equ &981F              ; Dots to print for current block.
+M4S_DISKWRITE_PROGRESS equ &981F         ; 512-byte chunks until next dot.
 
         org KL_ROM_BASE
 
@@ -1163,15 +1163,6 @@ rsx_import_short_block:
 
 rsx_import_block_ready:
         ld (M4S_IMPORT_BLOCK), bc
-        ld a, 1
-        ld (M4S_PROGRESS_DOTS), a
-        ld a, b
-        cp 8
-        jr nz, rsx_import_progress_ready
-        ld a, 4
-        ld (M4S_PROGRESS_DOTS), a
-
-rsx_import_progress_ready:
         call import_load_buffer_base
 
 rsx_import_block_loop:
@@ -1206,7 +1197,7 @@ rsx_import_advance_chunk:
         jr rsx_import_block_loop
 
 rsx_import_block_done:
-        call print_progress_dots
+        call print_progress_dot
         jr rsx_import_refill
 
 rsx_import_close_done:
@@ -1441,6 +1432,8 @@ rsx_diskwrite_source_nonempty:
 rsx_diskwrite_nonempty:
         xor a
         ld (M4S_PROGRESS_SEEN), a
+        ld a, 4
+        ld (M4S_DISKWRITE_PROGRESS), a
         ld de, 0                         ; DE = shared source file offset.
         call diskwrite_request_chunk
         jp nc, rsx_diskwrite_error
@@ -1572,7 +1565,7 @@ rsx_diskwrite_char_ok:
         ld a, d                          ; Stop if the 16-bit transfer offset
         or e                             ; wraps around at 64KB.
         jp z, rsx_diskwrite_close_done
-        call print_progress_dot
+        call diskwrite_progress_chunk
         jp rsx_diskwrite_chunk
 
 rsx_diskwrite_close_done:
@@ -2649,17 +2642,18 @@ print_progress_dot:
         call TXT_OUTPUT
         ret
 
-print_progress_dots:
-        ld a, (M4S_PROGRESS_DOTS)
-
-print_progress_dots_loop:
-        or a
-        ret z
-        push af
-        call print_progress_dot
-        pop af
+diskwrite_progress_chunk:
+        ld a, (M4S_DISKWRITE_PROGRESS)
         dec a
-        jr print_progress_dots_loop
+        jr z, diskwrite_progress_dot
+        ld (M4S_DISKWRITE_PROGRESS), a
+        ret
+
+diskwrite_progress_dot:
+        ld a, 4
+        ld (M4S_DISKWRITE_PROGRESS), a
+        call print_progress_dot
+        ret
 
 print_progress_newline:
         ld a, (M4S_DEBUG_MODE)
