@@ -1521,7 +1521,7 @@ diskwrite_update_header:
         ld hl, (M4S_DISKWRITE_HEADER)
         ld de, M4S_IMPORT_HEADER
         ex de, hl
-        ld bc, 128
+        ld bc, 69
         ldir
         ld hl, (M4S_DISKWRITE_HEADER)
         ld de, 64
