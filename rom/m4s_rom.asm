@@ -2041,10 +2041,10 @@ rsx_m4load_chunk:
         out (c), a
 
         call m4load_read_byte
-        jr nc, rsx_m4load_error
+        jp nc, rsx_m4load_error
         ld c, a
         call m4load_read_byte
-        jr nc, rsx_m4load_error
+        jp nc, rsx_m4load_error
         ld b, a                          ; BC = returned byte count.
 
         ld a, b
@@ -2054,7 +2054,7 @@ rsx_m4load_chunk:
         jr nz, rsx_m4load_count_valid
         ld a, c
         or a
-        jr nz, rsx_m4load_error
+        jp nz, rsx_m4load_error
 
 rsx_m4load_count_valid:
         ld a, b
@@ -2063,7 +2063,7 @@ rsx_m4load_count_valid:
 
 rsx_m4load_write_loop:
         call m4load_read_byte
-        jr nc, rsx_m4load_error
+        jp nc, rsx_m4load_error
         ld (hl), a
         inc hl
         inc de
@@ -2113,6 +2113,15 @@ rsx_m4loadh_have_param:
         ret
 
 rsx_m4loadh_nonempty:
+        call m4exec_check_request
+        ld a, M4S_CMD_TYPE
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+        call m4load_read_byte
+        jp nc, rsx_m4load_error
+        or a
+        jr z, rsx_m4load_error
+
         push ix
         call rsx_m4info_have_param
         ld hl, msg_loadh_prompt
@@ -2150,19 +2159,19 @@ rsx_m4loadh_chunk:
 
         ld a, b
         cp 3
-        jr nc, rsx_m4load_error          ; Refuse counts above 512 bytes.
+        jp nc, rsx_m4load_error          ; Refuse counts above 512 bytes.
         cp 2
         jr nz, rsx_m4loadh_count_valid
         ld a, c
         or a
-        jr nz, rsx_m4load_error
+        jp nz, rsx_m4load_error
 
 rsx_m4loadh_count_valid:
         call m4load_read_byte            ; Read AMSDOS load address low byte.
-        jr nc, rsx_m4load_error
+        jp nc, rsx_m4load_error
         push af
         call m4load_read_byte            ; Read AMSDOS load address high byte.
-        jr nc, rsx_m4load_error
+        jp nc, rsx_m4load_error
         push af
         ld a, d
         or e
@@ -2367,6 +2376,46 @@ m4loadh_send_name:
         pop bc
         inc de
         djnz m4loadh_send_name
+
+        xor a
+        ld bc, M4S_PORT_DATA
+        out (c), a
+
+        pop de
+        pop hl
+        ret
+
+; Send request "X:filename" to check that |exec can load the file.
+m4exec_check_request:
+        push hl
+        push de
+
+        ld a, M4S_CMD_REQ_BEGIN
+        ld bc, M4S_PORT_COMMAND
+        out (c), a
+
+        ld bc, M4S_PORT_DATA
+        ld a, "X"
+        out (c), a
+        ld a, ":"
+        out (c), a
+
+        ld l, (ix+0)
+        ld h, (ix+1)                     ; HL = string descriptor.
+        ld b, (hl)                       ; B = filename length.
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)                       ; DE = filename data.
+
+m4exec_check_name:
+        ld a, (de)
+        push bc
+        ld bc, M4S_PORT_DATA
+        out (c), a
+        pop bc
+        inc de
+        djnz m4exec_check_name
 
         xor a
         ld bc, M4S_PORT_DATA

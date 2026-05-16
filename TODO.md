@@ -12,10 +12,6 @@
     Use the shared source filename as the disk filename where this is
     unambiguous. For paths, use the final path component.
 
-* Fix |EXEC prompting after load failure.
-    When |EXEC fails to read a file, it should report the failure and return
-    without asking whether to execute.
-
 * Expand debug mode as needed.
     |debug[,0|1] now controls diskread's OPEN/HDR/DONE/REM diagnostics. Add
     more request/response diagnostics only where they help diagnose real issues.
