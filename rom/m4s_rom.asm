@@ -1153,13 +1153,22 @@ rsx_import_done:
         ret
 
 import_save_header:
+        push hl
         push de
         push bc
+        push hl
         ld de, M4S_IMPORT_HEADER
-        ld bc, 128
+        ld bc, 69
+        ldir
+        pop hl
+        ld de, &00D4                     ; M4 ROM: (0xE4-0x55)+69.
+        add hl, de
+        ld de, M4S_IMPORT_HEADER + 69
+        ld bc, 59
         ldir
         pop bc
         pop de
+        pop hl
         ret
 
 ; Diagnostic for diskread length mismatches.  BC is the AMSDOS header length and
