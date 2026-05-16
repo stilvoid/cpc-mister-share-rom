@@ -33,9 +33,8 @@ keeps this download cached on the EBS volume.
 
 ## Sync the core to EC2
 
-The scaffold Makefile can drive the remote build. From `mister-cpc-m4`, set
-`REMOTE_HOST` to the EC2 SSH target if the default in the Makefile is not
-current:
+The Makefile can drive the remote build. From this repository, set `REMOTE_HOST`
+to the EC2 SSH target if the default in the Makefile is not current:
 
 ```sh
 make remote-start-ec2

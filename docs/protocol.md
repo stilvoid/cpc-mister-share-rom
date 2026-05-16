@@ -4,8 +4,8 @@ CPC MiSTer Share uses a small mailbox between the CPC Z80, the Amstrad core,
 and Main_MiSTer.  The CPC ROM writes requests to four I/O ports, the FPGA stores
 the request, and the HPS side answers by filling the response stream.
 
-The protocol is intentionally project-specific.  It is not an M4 board protocol
-and does not try to emulate the M4 hardware stack.
+The protocol is intentionally project-specific and focused on shared-folder
+requests for the Amstrad core.
 
 ## Ports
 

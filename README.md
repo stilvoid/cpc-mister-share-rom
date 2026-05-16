@@ -2,10 +2,9 @@
 
 Experimental shared-folder support for the MiSTer Amstrad CPC core.
 
-This is no longer trying to be an M4 board clone.  The current goal is a useful
-RSX command set that lets a CPC program or user move data between the CPC and a
-MiSTer `shared` folder, plus explicit commands for copying files to and from the
-currently mounted AMSDOS disk.
+CPC MiSTer Share provides an explicit RSX command set that lets a CPC program or
+user move data between the CPC and a MiSTer `shared` folder, plus explicit
+commands for copying files to and from the currently mounted AMSDOS disk.
 
 The current ROM identifies itself as:
 
@@ -176,8 +175,8 @@ diagnostics such as AMSDOS open/header/done/remaining counters.
 
 - This is an explicit RSX shared-folder system, not transparent AMSDOS drive
   integration.
-- It is not currently M4 ROM compatible and does not provide SymbOS mass
-  storage compatibility.
+- It is an explicit shared-folder utility, not transparent disk-drive
+  integration.
 - No wildcard or recursive operations yet.
 - Some operations use 16-bit CPC-side offsets or lengths.
 - `|exec` deliberately jumps into loaded CPC code; bad or incompatible binaries
