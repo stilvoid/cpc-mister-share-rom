@@ -1557,6 +1557,7 @@ rsx_diskwrite_close_done:
         push ix
         call CAS_OUT_CLOSE
         pop ix
+        call diskwrite_progress_flush
         call print_progress_newline
         ld hl, msg_diskwrite_done
         call print_string
@@ -2646,6 +2647,17 @@ diskwrite_progress_chunk:
 diskwrite_progress_dot:
         ld a, 4
         ld (M4S_DISKWRITE_PROGRESS), a
+        call print_progress_dot
+        ret
+
+diskwrite_progress_flush:
+        ld hl, (M4S_IMPORT_DONE)
+        ld a, h
+        or l
+        ret z
+        ld a, (M4S_DISKWRITE_PROGRESS)
+        cp 4
+        ret z
         call print_progress_dot
         ret
 
