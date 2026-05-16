@@ -24,6 +24,10 @@
 ;     |diskread,"DISCFILE","shared/path"
 ;     |diskread,"DISCFILE","shared/path",0
 ;     |diskwrite,"shared/path","DISCFILE"
+;     |about
+;     |debug
+;     |debug,0
+;     |debug,1
 ;
 ; Running |HELLO prints:
 ;
@@ -67,6 +71,8 @@ M4S_DISKWRITE_LOAD equ &9815             ; 16-bit AMSDOS output load address.
 M4S_DISKWRITE_ENTRY equ &9817            ; 16-bit AMSDOS output entry address.
 M4S_DISKWRITE_LOGICAL equ &9819          ; 16-bit AMSDOS output logical length.
 M4S_DISKWRITE_COUNT equ &981B            ; 16-bit current host payload count.
+M4S_DEBUG_MODE equ &981D                 ; Non-zero enables noisy diagnostics.
+M4S_PROGRESS_SEEN equ &981E              ; Non-zero after progress output.
 
         org KL_ROM_BASE
 
@@ -108,6 +114,8 @@ rom_prefix:
         jp rsx_rm                        ; Entry 14: BASIC command |rm.
         jp rsx_diskread                  ; Entry 15: BASIC command |diskread.
         jp rsx_diskwrite                 ; Entry 16: BASIC command |diskwrite.
+        jp rsx_about                     ; Entry 17: BASIC command |about.
+        jp rsx_debug                     ; Entry 18: BASIC command |debug.
 
 ; ---------------------------------------------------------------------------
 ; External command names.
@@ -137,6 +145,8 @@ command_names:
         db "R", &CD                      ; Entry 14: rsx_rm ("M" + bit 7).
         db "DISKREA", &C4                ; Entry 15: rsx_diskread ("D" + bit 7).
         db "DISKWRIT", &C5               ; Entry 16: rsx_diskwrite ("E" + bit 7).
+        db "ABOU", &D4                   ; Entry 17: rsx_about ("T" + bit 7).
+        db "DEBU", &C7                   ; Entry 18: rsx_debug ("G" + bit 7).
         db 0                             ; End of command table.
 
 ; ---------------------------------------------------------------------------
@@ -155,6 +165,9 @@ command_names:
 rom_init:
         push de
         push hl
+        xor a
+        ld (M4S_DEBUG_MODE), a
+        ld (M4S_PROGRESS_SEEN), a
         ld hl, msg_intro
         call print_string
         pop hl
@@ -175,6 +188,42 @@ rom_init:
 ; ---------------------------------------------------------------------------
 rsx_hello:
         ld hl, msg_hello
+        call print_string
+        ret
+
+; ---------------------------------------------------------------------------
+; |about and |debug RSX implementations.
+; ---------------------------------------------------------------------------
+rsx_about:
+        ld hl, msg_about
+        call print_string
+        ret
+
+rsx_debug:
+        cp 0
+        jr z, rsx_debug_show
+        cp 1
+        jr z, rsx_debug_set
+        ld hl, msg_debug_usage
+        call print_string
+        ret
+
+rsx_debug_set:
+        ld a, (ix+0)
+        ld h, (ix+1)
+        or h
+        ld (M4S_DEBUG_MODE), a
+
+rsx_debug_show:
+        ld a, (M4S_DEBUG_MODE)
+        or a
+        jr z, rsx_debug_off
+        ld hl, msg_debug_on
+        call print_string
+        ret
+
+rsx_debug_off:
+        ld hl, msg_debug_off
         call print_string
         ret
 
@@ -1037,6 +1086,8 @@ rsx_import_source_nonempty:
         ret
 
 rsx_import_nonempty:
+        xor a
+        ld (M4S_PROGRESS_SEEN), a
         ld hl, (M4S_IMPORT_SRC_DESC)      ; HL = disk filename descriptor.
         ld b, (hl)                       ; B = filename length.
         inc hl
@@ -1059,7 +1110,7 @@ rsx_import_nonempty:
         ld b, (hl)                        ; BC = file payload length.
         ld (M4S_IMPORT_REMAIN), bc
         push bc
-        call import_print_lengths
+        call debug_print_lengths
         pop bc
         pop hl                            ; HL = AMSDOS header pointer.
         pop bc
@@ -1145,6 +1196,7 @@ rsx_import_advance_chunk:
         jr rsx_import_block_loop
 
 rsx_import_block_done:
+        call print_progress_dot
         jr rsx_import_refill
 
 rsx_import_close_done:
@@ -1152,7 +1204,7 @@ rsx_import_close_done:
         push ix
         call CAS_IN_CLOSE
         pop ix
-        call import_print_done
+        call debug_print_done
         ld a, (M4S_IMPORT_HEADER_MODE)
         or a
         jr z, rsx_import_done
@@ -1160,6 +1212,7 @@ rsx_import_close_done:
         jp nc, rsx_import_error
 
 rsx_import_done:
+        call print_progress_newline
         ld hl, msg_import_done
         call print_string
         ret
@@ -1185,7 +1238,10 @@ import_save_header:
 
 ; Diagnostic for diskread length mismatches.  BC is the AMSDOS header length and
 ; the next word on the stack is the length returned directly by CAS_IN_OPEN.
-import_print_lengths:
+debug_print_lengths:
+        ld a, (M4S_DEBUG_MODE)
+        or a
+        ret z
         push hl
         push de
         push bc
@@ -1208,7 +1264,10 @@ import_print_lengths:
         pop hl
         ret
 
-import_print_done:
+debug_print_done:
+        ld a, (M4S_DEBUG_MODE)
+        or a
+        ret z
         push hl
         ld hl, msg_import_done_len
         call print_string
@@ -1370,6 +1429,8 @@ rsx_diskwrite_source_nonempty:
         ret
 
 rsx_diskwrite_nonempty:
+        xor a
+        ld (M4S_PROGRESS_SEEN), a
         ld de, 0                         ; DE = shared source file offset.
         call diskwrite_request_chunk
         jp nc, rsx_diskwrite_error
@@ -1501,6 +1562,7 @@ rsx_diskwrite_char_ok:
         ld a, d                          ; Stop if the 16-bit transfer offset
         or e                             ; wraps around at 64KB.
         jp z, rsx_diskwrite_close_done
+        call print_progress_dot
         jp rsx_diskwrite_chunk
 
 rsx_diskwrite_close_done:
@@ -1508,6 +1570,7 @@ rsx_diskwrite_close_done:
         push ix
         call CAS_OUT_CLOSE
         pop ix
+        call print_progress_newline
         ld hl, msg_diskwrite_done
         call print_string
         ret
@@ -2517,11 +2580,48 @@ print_hex_digit:
         call TXT_OUTPUT
         ret
 
+print_progress_dot:
+        ld a, (M4S_DEBUG_MODE)
+        or a
+        ret nz
+        ld a, 1
+        ld (M4S_PROGRESS_SEEN), a
+        ld a, "."
+        call TXT_OUTPUT
+        ret
+
+print_progress_newline:
+        ld a, (M4S_DEBUG_MODE)
+        or a
+        ret nz
+        ld a, (M4S_PROGRESS_SEEN)
+        or a
+        ret z
+        ld hl, msg_newline
+        call print_string
+        ret
+
 msg_hello:
         db "M4S ROM OK", 13, 10, 0
 
 msg_intro:
         db " M4S ROM Stage 4.14 installed", 13, 10, 13, 10, 0
+
+msg_about:
+        db "M4S ROM Stage 4.14", 13, 10
+        db "Shared: ls cd pwd type hexdump stat", 13, 10
+        db "Files: loadm savem exec mkdir mv cp rm", 13, 10
+        db "Disk: diskread diskwrite", 13, 10
+        db "Debug: debug[,0|1]", 13, 10, 0
+
+msg_debug_usage:
+        db "Usage: |debug[,0|1]", 13, 10, 0
+
+msg_debug_on:
+        db "Debug ON", 13, 10, 0
+
+msg_debug_off:
+        db "Debug OFF", 13, 10, 0
 
 msg_ls_usage:
         db "Usage: |ls,", 34, "DIR", 34, 13, 10, 0

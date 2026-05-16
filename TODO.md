@@ -1,8 +1,21 @@
-* Improve cp so it can copy into a folder
-    cp foo bar when bar is a folder says bar exists
-    no need to go as far as recursive copy though
-* Tighten AMSDOS header detection in |stat so random payload bytes are less
-    likely to be reported as a valid header.
-* Keep |diskread header behaviour explicit once header-preserving reads are in:
-    default should preserve the 128-byte AMSDOS header, with a payload-only mode
-    if we still want one.
+* Keep refusing overwrites consistently.
+    Commands that create files should fail clearly if the destination already
+    exists. Users can delete, rename, or choose another destination explicitly.
+
+* Review command ergonomics for consistency.
+    Make path handling, default filenames, relative paths, case-insensitive
+    reads, and destination behaviour feel consistent across:
+    ls, cd, pwd, type, hexdump, stat, loadm, savem, exec, mkdir, mv, cp, rm,
+    diskread, and diskwrite.
+
+* Consider making the second parameter of |DISKWRITE optional.
+    Use the shared source filename as the disk filename where this is
+    unambiguous. For paths, use the final path component.
+
+* Fix |EXEC prompting after load failure.
+    When |EXEC fails to read a file, it should report the failure and return
+    without asking whether to execute.
+
+* Expand debug mode as needed.
+    |debug[,0|1] now controls diskread's OPEN/HDR/DONE/REM diagnostics. Add
+    more request/response diagnostics only where they help diagnose real issues.
