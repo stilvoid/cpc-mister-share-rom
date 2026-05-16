@@ -1,308 +1,239 @@
 # Manual Test Plan
 
-## Stage 1: Expansion ROM visible
+This checklist is for the shared-folder tester build.  It assumes the matching
+ROM, Amstrad core, and Main_MiSTer binary are installed.
 
-1. Run `make` to build `build/boot.eXX`.
-2. Copy to the Amstrad core's expected ROM folder using the slot filename you
-   want to test, for example `boot.e09`.
-3. Boot the core.
-4. Confirm the boot screen includes:
+## 1. Boot and Command Registration
+
+1. Boot the modified Amstrad core.
+2. Confirm the boot screen includes:
 
 ```text
- M4S ROM Stage 4.13 installed
-
+ M4S ROM Stage 4.14 installed
 ```
 
-5. Run:
+3. Run:
 
 ```basic
-|HELLO
+|about
 ```
 
 Expected:
 
-```text
-M4S ROM OK
+- `|about` prints the stage and a readable command list.
+- `|HELLO` is not present.
+
+## 2. Shared Folder Discovery
+
+1. Create a `shared` folder beside the resolved Amstrad games folder, for
+   example `/media/fat/games/Amstrad/shared` or
+   `/media/usb0/games/Amstrad/shared`.
+2. Put a small text file and binary file in it.
+3. Run:
+
+```basic
+|ls
+|pwd
 ```
 
-## Stage 2: Mailbox fallback directory
+Expected:
+
+- `|ls` shows the shared-folder contents.
+- `|pwd` shows `/`.
+- If the folder is missing, the command reports that clearly instead of
+  hanging.
+
+## 3. Navigation and Path Handling
+
+Create a nested directory such as `games/dizzy`, then run:
+
+```basic
+|ls,"games"
+|cd,"games"
+|pwd
+|ls,"dizzy"
+|cd,"dizzy"
+|pwd
+|cd,".."
+|pwd
+|cd
+|pwd
+```
+
+Expected:
+
+- `|ls,"DIR"` lists that directory without changing the current directory.
+- Relative paths, absolute paths starting with `/`, and `..` work.
+- `|cd` with no argument returns to `/`.
+- Paths cannot escape the shared-folder root.
+
+## 4. Text, Binary, and Metadata
 
 Run:
 
 ```basic
-|ls
+|type,"hello.txt"
+|hexdump,"hello.txt"
+|stat,"hello.txt"
+|stat,"headered.bin"
 ```
 
 Expected:
 
-```text
-NO M4S INDEX
-```
+- `|type` prints text and displays LF line endings correctly on the CPC.
+- `|hexdump` prints offset-prefixed ASCII hex.
+- `|stat` reports `AMSDOS: NO HEADER` for headerless files.
+- `|stat` reports load, entry, length, and checksum details for valid AMSDOS
+  files.
 
-## Stage 3A: Preloaded M4S index
+## 5. Shared Folder File Management
 
-1. Open the Amstrad core menu.
-2. Select `Load M4S index`.
-3. Choose `examples/m4s-index.txt` or another plain text index file.
-4. Run:
-
-```basic
-|ls
-```
-
-Expected when using the example file:
-
-```text
-M4S INDEX
-README.TXT
-HELLO.BAS
-GAMES
-```
-
-## Stage 3B: Live shared folder listing
-
-1. Install the matching custom Main_MiSTer binary and Amstrad core.
-2. Create files in MiSTer's configured `shared` folder, or leave
-   `shared_folder` empty to use the default `shared` folder.
-3. Start the Amstrad core.
-4. Run:
+Run:
 
 ```basic
-|ls
+|mkdir,"tmp"
+|cp,"hello.txt","tmp/hello.txt"
+|cp,"hello.txt","tmp"
+|mv,"tmp/hello.txt","tmp/renamed.txt"
+|rm,"tmp/renamed.txt"
+|ls,"tmp"
 ```
 
 Expected:
 
-```text
-M4S SHARED
-```
+- `|mkdir` creates the directory.
+- `|cp` can copy to a file path or to an existing directory.
+- `|mv` renames files or directories.
+- `|rm` removes files and refuses directories.
+- Create operations refuse to overwrite existing destinations.
 
-followed by the files and folders from the shared folder.
+## 6. Memory Save and Load
 
-## Stage 4: Navigate shared folders
-
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Create a child directory under the resolved shared folder.
-3. Run:
+Put a recognizable byte pattern in memory, then run:
 
 ```basic
-|ls
-|cd,"GAMES"
-|ls
-|ls,"DIZZY"
-|cd,"DIZZY"
-|ls
-|cd,".."
-|ls
-|ls,"/GAMES/DIZZY"
-|cd,"/GAMES/DIZZY"
-|ls
-|cd
-|ls
+|savem,"mem.bin",&4000,&0100
+|hexdump,"mem.bin"
+|loadm,"mem.bin",&7000
 ```
 
 Expected:
 
-`|cd,"GAMES"` prints `CWD: /GAMES`, nested and parent paths update `CWD`
-correctly, `|ls,"DIZZY"` and `|ls,"/GAMES/DIZZY"` list those folders without
-changing `CWD`, file commands resolve relative to that directory, and bare
-`|cd` resets to `CWD: /`.
+- `|savem` creates `mem.bin`.
+- `|hexdump` matches the bytes from `&4000`.
+- `|loadm` copies the same bytes to `&7000`.
+- Saving over an existing shared file is refused.
 
-## Stage 4A: Type a shared text file
+## 7. Execute Shared AMSDOS Files
 
-1. Install the matching custom Main_MiSTer binary and Amstrad core.
-2. Put a small text file in the resolved shared folder and another in its
-   parent folder.
-3. Start the Amstrad core and run:
+Test a missing file first:
 
 ```basic
-|type,"HELLO.TXT"
-|type,"../PARENT.TXT"
+|exec,"missing.bin"
 ```
 
 Expected:
 
-The file contents print to the CPC screen. Bare LF line endings are displayed as
-CRLF.
+- It reports `Load failed`.
+- It does not ask whether to run the file.
 
-## Stage 4B: Dump a shared binary file
-
-1. Install the matching custom Main_MiSTer binary and Amstrad core.
-2. Put a small binary file in the resolved shared folder.
-3. Start the Amstrad core and run:
+Then test a known-good AMSDOS binary:
 
 ```basic
-|hexdump,"FILE.BIN"
+|exec,"program.bin"
 ```
 
 Expected:
 
-The CPC prints offset-prefixed hex rows such as:
+- File metadata is printed.
+- The command asks `Load and CALL entry? Y/N`.
+- `N` cancels cleanly.
+- `Y` loads and runs the program, or for a BASIC file prints that you should
+  type `RUN`.
 
-```text
-0000: 00 01 02 03
-```
+## 8. Disk Read
 
-The output is ASCII hex, not raw binary, because the current mailbox response is
-still zero-terminated.
-
-## Stage 4C: Inspect shared file metadata
-
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Put an AMSDOS binary file in the resolved shared folder.
-3. Start the Amstrad core and run:
+With a disk image mounted and a known file visible to CPC `CAT`, run:
 
 ```basic
-|stat,"FILE.BIN"
-```
-
-Expected for a file with a valid AMSDOS header:
-
-```text
-AMSDOS: HEADER OK
-LOAD: &....
-ENTRY: &....
-```
-
-Headerless files should print `AMSDOS: NO HEADER`.
-
-## Stage 4D: Load a shared binary file
-
-1. Install the matching custom Main_MiSTer binary, Amstrad core, and ROM.
-2. Put a small binary file in the resolved shared folder and another in its
-   parent folder.
-3. Start the Amstrad core and run:
-
-```basic
-|loadm,"FILE.BIN"
+|diskread,"DISCFILE"
+|diskread,"DISCFILE","copy.bin"
+|diskread,"DISCFILE","payload.bin",0
 ```
 
 Expected:
 
-```text
-Loaded
-```
+- The command shows `Reading:   0%` and updates percentage progress.
+- It ends with `Disk read OK`.
+- The default forms preserve the AMSDOS header in the shared file.
+- The third form strips the header.
+- Existing shared destinations are refused with a useful error.
 
-Use a monitor, BASIC `PEEK`, or a small test program to confirm the bytes at
-`&4000` match the source file.
+## 9. Disk Write
 
-Then try an explicit destination:
-
-```basic
-|loadm,"FILE.BIN",&8000
-|loadm,"../PARENT.BIN",&7000
-```
-
-Confirm the bytes at `&8000` and `&7000` match the source files. The proof
-command reads in 512-byte chunks, and the file offset is currently 16-bit.
-
-## Stage 4E: Load and run an AMSDOS binary
-
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Put an AMSDOS binary with a valid header in the resolved shared folder.
-3. Start the Amstrad core and run:
+Use an AMSDOS-headered file in the shared folder and a blank or disposable disk
+image:
 
 ```basic
-|exec,"FILE.BIN"
+|diskwrite,"copy.bin"
+|diskwrite,"copy.bin","OTHER"
+CAT
 ```
 
 Expected:
 
-The command prints file metadata, prompts for confirmation, then loads the
-payload at the AMSDOS load address and jumps to the AMSDOS entry address when
-you press `Y`.
+- The command shows `Writing:   0%` and updates percentage progress.
+- It ends with `Disk write OK`.
+- The one-argument form uses the final shared path component as the disk name.
+- The two-argument form uses the explicit disk name.
+- `CAT` shows the file on the disk.
 
-## Stage 4F: Save a memory range to the shared folder
+For executable binaries, reset the CPC after writing and verify `RUN"NAME"` from
+the disk works.
 
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Start the Amstrad core and put a recognizable byte pattern in memory.
-3. Run:
+## 10. Round Trip Verification
+
+For a larger AMSDOS file:
+
+1. `|diskread` it from disk to shared.
+2. Reset the CPC.
+3. `|diskwrite` it from shared to a different disk image.
+4. Reset the CPC.
+5. `|diskread` the new disk file back to a second shared filename.
+6. Compare the two shared files on the host.
+
+Expected:
+
+- Payload bytes match.
+- Header fields and checksum remain valid.
+- Header residue outside meaningful AMSDOS fields does not have to match
+  byte-for-byte.
+
+## 11. Debug Mode
+
+Run:
 
 ```basic
-|savem,"OUT.BIN",&4000,&0100
-|savem,"../PARENT.OUT",&4000,&0100
+|debug
+|debug,1
+|diskread,"DISCFILE","debug.bin"
+|debug,0
 ```
 
 Expected:
 
-```text
-Saved
-```
+- `|debug` shows the current state.
+- `|debug,1` enables extra diskread diagnostics such as `OPEN=`, `HDR=`,
+  `DONE=`, and `REM=`.
+- `|debug,0` returns to normal progress output.
 
-Confirm `OUT.BIN` appears in the current shared folder, `PARENT.OUT` appears in
-the parent folder, and both compare with the bytes at `&4000`.
-`|hexdump,"OUT.BIN"` should show the saved data too.
+## Failure Reports
 
-## Stage 4G: Create a shared folder directory
+When reporting an issue, include:
 
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Start the Amstrad core and run:
-
-```basic
-|mkdir,"NEW"
-|ls
-```
-
-Expected:
-
-`|mkdir,"NEW"` prints `Created: NEW`, and `|ls` shows `NEW/`.
-
-## Stage 4H: Rename a shared folder file or directory
-
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Create `OLD.BIN` in the current shared folder.
-3. Start the Amstrad core and run:
-
-```basic
-|mv,"OLD.BIN","NEW.BIN"
-|ls
-```
-
-Expected:
-
-`|mv,"OLD.BIN","NEW.BIN"` prints `Renamed: OLD.BIN -> NEW.BIN`, `|ls` shows
-`NEW.BIN`, and the command refuses to overwrite an existing destination.
-
-## Stage 4I: Copy a shared folder file
-
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Create `A.TXT` and directory `B` in the current shared folder.
-3. Start the Amstrad core and run:
-
-```basic
-|cp,"A.TXT","B/A.TXT"
-|ls,"B"
-```
-
-Expected:
-
-`|cp,"A.TXT","B/A.TXT"` prints `Copied: A.TXT -> B/A.TXT`, `|ls,"B"` shows
-`A.TXT`, and the command refuses to overwrite an existing destination.
-
-## Stage 4J: Remove a shared folder file
-
-1. Install the matching custom Main_MiSTer binary and ROM.
-2. Create `DELETE.ME` in the current shared folder.
-3. Start the Amstrad core and run:
-
-```basic
-|rm,"DELETE.ME"
-|ls
-```
-
-Expected:
-
-`|rm,"DELETE.ME"` prints `Removed: DELETE.ME`, and `|ls` no longer shows it.
-Directories should be refused.
-
-## Debug hints
-
-- If `|HELLO` is unknown, debug ROM header/RSX registration first.
-- If `|HELLO` works but `|ls` hangs, debug port decode/status bits.
-- If bytes are wrong, confirm I/O data direction and read strobe timing.
-- If `|ls` still prints `NO M4S INDEX`, confirm the core menu download used `Load M4S index`.
-- If live listing does not update, confirm the custom Main_MiSTer binary is
-  running and that the Amstrad core has the `m4s_hps_ext` `EXT_BUS` wiring.
-- If `|cd`, `|type`, `|hexdump`, `|stat`, `|loadm`, `|exec`, `|savem`, `|mkdir`, `|mv`, `|cp`, or `|rm` hangs, check the CPC-to-HPS request status path in
-  `m4s_mailbox` and `m4s_hps_ext`.
-- If the core locks up, check Z80 wait-state/ack behaviour and whether I/O reads are being held too long.
+- exact command typed
+- exact screen output
+- file names and whether they contain an AMSDOS header
+- mounted disk image type if disk commands were involved
+- whether `|debug,1` was enabled
+- whether the CPC crashed, reset, hung, or returned to BASIC

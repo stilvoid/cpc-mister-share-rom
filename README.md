@@ -1,532 +1,198 @@
-# CPC MiSTer Mass Storage Scaffold
+# CPC MiSTer Shared Folder ROM
 
-Experimental scaffold for adding a folder-backed mass-storage device to the
-MiSTer Amstrad CPC core.
+Experimental shared-folder support for the MiSTer Amstrad CPC core.
 
-This is deliberately not a full M4 clone. The goal is a MiSTer-specific shared
-folder system controlled by explicit RSX commands. Stage 1 was only a tiny CPC
-expansion ROM that proves the CPC can see the ROM and dispatch an RSX command.
-Stage 2 adds a minimal CPC-to-FPGA mailbox. Stage 3A preloads a text directory
-index through MiSTer's existing file download path. Stage 3B adds a custom
-Main_MiSTer hook that serves live `shared` folder listings on demand through
-`EXT_BUS`. Stage 4 starts a read-only path with `|type,"FILE.TXT"` and
-`|hexdump,"FILE.BIN"`, adds `|stat,"FILE.BIN"` for AMSDOS header diagnostics,
-then adds a first chunked binary load proof with `|loadm,"FILE.BIN"`. Stage
-4.5 adds `|cd` navigation within the shared folder. Stage 4.6 adds a first raw
-memory save proof with `|savem,"FILE.BIN",&4000,&0100`. Stage 4.7 adds the
-Unix-like command aliases. Stage 4.8 adds `|mkdir`, the first shared-folder
-management command. Stage 4.9 adds conservative `|mv` rename support. Stage
-4.10 adds file-only `|rm` removal. Stage 4.11 adds optional path arguments for
-`|ls`. Stage 4.12 replaces `|cat` with `|type` and drops the old public `M4*`
-command names. Stage 4.13 adds shared-to-shared `|cp`. Stage 4.14 starts disk
-interaction with `|diskread`, copying a file from the currently selected CPC disk
-into the shared folder.
+This is no longer trying to be an M4 board clone.  The current goal is a useful
+RSX command set that lets a CPC program or user move data between the CPC and a
+MiSTer `shared` folder, plus explicit commands for copying files to and from the
+currently mounted AMSDOS disk.
 
-## Stage 1-4 status
-
-Implemented:
-
-- A valid 16KB CPC background expansion ROM source in `rom/m4s_rom.asm`.
-- A boot sign-on line:
+The current ROM identifies itself as:
 
 ```text
  M4S ROM Stage 4.14 installed
-
 ```
 
-- One RSX command:
+## Requirements
 
-```basic
-|HELLO
-```
+The tester build needs three matching pieces:
 
-Expected output:
+- this ROM, installed as an Amstrad expansion ROM such as
+  `games/Amstrad/boot.e09`
+- the matching modified `Amstrad_MiSTer` core/RBF
+- the matching modified `Main_MiSTer` binary
+
+The ROM can boot without the modified core/Main, but the shared-folder commands
+will not work usefully.
+
+## Shared Folder
+
+Create a folder called `shared` next to the Amstrad core's resolved games
+folder.  The host side uses MiSTer's normal path resolution, so this follows the
+same USB/SD precedence as loading disk images.
+
+Common examples:
 
 ```text
-M4S ROM OK
+/media/fat/games/Amstrad/shared
+/media/usb0/games/Amstrad/shared
 ```
 
-- A second RSX command:
+Paths passed to RSX commands are relative to the current shared directory.
+Leading `/` starts from the shared-folder root.  `..` is supported but is kept
+inside the shared-folder tree.
 
-```basic
-|ls
-```
+## Building and Installing
 
-Expected output before an index file is loaded:
-
-```text
-NO M4S INDEX
-```
-
-Expected output after loading `examples/m4s-index.txt` through the core menu's
-`Load M4S index` item:
-
-```text
-M4S INDEX
-README.TXT
-HELLO.BAS
-GAMES
-```
-
-- A mock FPGA mailbox in `rtl/m4s_mailbox.sv` for commands `PING` and
-  `DIR_BEGIN`.
-- A MiSTer core menu entry `Load M4S index` that accepts a plain text file and
-  streams it back via `|ls`.
-- A small Amstrad-specific Main_MiSTer helper that lists the configured
-  `shared` folder and sends it to the core over `EXT_BUS`.
-- A current-directory model for the helper, controlled by `|cd`.
-- An FPGA `EXT_BUS` bridge in `rtl/m4s_hps_ext.sv` that loads that live listing
-  into the same directory index buffer used by `Load M4S index`.
-- A read-only `|type,"FILE.TXT"` proof that sends a filename from the CPC to
-  Main_MiSTer and streams the file contents back through the mailbox.
-- A read-only `|hexdump,"FILE.BIN"` proof that asks Main_MiSTer to read a file
-  and return an ASCII hex dump, avoiding zero-byte framing issues while testing
-  binary reads.
-- A read-only `|stat,"FILE.BIN"` command that prints file size and AMSDOS
-  header metadata when the header checksum is valid.
-- A proof `|loadm,"FILE.BIN"` command that loads raw bytes from the shared
-  folder into CPC RAM at `&4000` using 512-byte chunks.
-- A deliberately dangerous `|exec,"FILE.BIN"` command that displays AMSDOS
-  header info, prompts for confirmation, loads the payload at the AMSDOS load
-  address, and jumps to the AMSDOS entry address.
-- A proof `|savem,"FILE.BIN",&4000,&0100` command that saves a CPC memory
-  range to a file in the current shared folder using small ASCII-hex chunks.
-- A proof `|diskread,"DISCFILE.BIN","shared.bin"` command that reads a file from
-  the current CPC disk through AMSDOS and writes it to the shared folder.
-
-Not implemented yet:
-
-- General file open/read/write commands beyond the proof RSX helpers.
-- BASIC program save/load helpers.
-- Export from the shared folder back to a mounted CPC disk.
-- Broader file management such as recursive directory removal, overwrite modes,
-  and wildcard operations.
-
-User-facing commands now use Unix-like RSX names where they do not collide with
-common CPC disk ROMs. Avoid `|DIR`, `|ERA`, and `|REN` as primary names because
-AMSDOS already uses them. Preferred names are `|ls`, `|cd`, `|pwd`, `|type`, `|stat`,
-`|hexdump`, `|loadm`, `|savem`, `|exec`, `|saveb`, `|loadb`, `|diskread`,
-`|diskwrite`, `|mkdir`, `|mv`, `|cp`, and `|rm`.
-
-## How CPC expansion ROMs work
-
-The Amstrad CPC maps expansion ROMs into the upper 16KB address range,
-`&C000` to `&FFFF`. Each ROM image can therefore be up to 16KB.
-
-At boot, the CPC firmware walks available ROM slots and examines the ROM prefix
-at `&C000`. A background ROM has type byte `1`. Its prefix also points to an
-external command name table and a matching jumpblock.
-
-For a background ROM, jumpblock entry 0 is the power-up initialisation routine.
-If that routine returns with carry set, the firmware registers the ROM as a
-provider of external commands. BASIC can then call suitable command names with
-the RSX bar syntax, for example `|HELLO`.
-
-In this Stage 1 ROM:
-
-- Entry 0 is `rom_init`, which returns success and allocates no RAM.
-- Entry 1 is `rsx_hello`, which prints `M4S ROM OK`.
-- Printing uses the standard CPC firmware `TXT OUTPUT` call at `&BB5A`.
-
-## How MiSTer loads `.eXX` ROMs
-
-MiSTer's Amstrad core can load CPC expansion ROM images as `.eXX` files, where
-`XX` is the ROM slot number in hexadecimal. For example:
-
-- `boot.eC0`
-- `boot.eC1`
-- `boot.e01`
-
-The ROM image itself is still a raw 16KB CPC expansion ROM. The `.eXX` suffix is
-the MiSTer-side loader convention that tells the core which expansion ROM slot
-to populate.
-
-Use a non-conflicting slot for local testing. This scaffold builds
-`build/boot.eXX` by default; rename or install it as the slot filename you want
-to test, such as `boot.e09`.
-
-## Build instructions
-
-Install `pasmo`, then run:
+Build only the ROM:
 
 ```sh
-make
+make build/boot.eXX
 ```
 
-On Debian/Ubuntu:
+Build the modified Main binary locally:
 
 ```sh
-sudo apt install pasmo
+make main
 ```
 
-The default output is:
-
-```text
-build/boot.eXX
-```
-
-To choose a different output slot/name:
+Build the core on the configured remote Quartus host:
 
 ```sh
-make ROM_OUT=build/boot.e09
+make remote-core
 ```
 
-The Makefile verifies that the final image is exactly 16384 bytes. The legacy
-`scripts/build_rom.sh` wrapper still works and delegates to `make`.
-
-## Where to place the ROM on MiSTer
-
-Place the built `.eXX` file in the Amstrad core's games folder:
-
-```text
-/media/fat/games/Amstrad/
-```
-
-If you use USB storage or another MiSTer games path, use the equivalent
-`games/Amstrad/` directory for that storage device.
-
-Then start or reset the Amstrad core so the expansion ROM is visible during the
-CPC firmware ROM walk.
-
-The `install` target deploys the expansion ROM, the built core, and the custom
-Main_MiSTer binary:
+Build and install all three pieces:
 
 ```sh
 make install
 ```
 
-Defaults:
+Useful Makefile variables:
 
-```text
+```sh
 MISTER_HOST=root@mister
 MISTER_ROM=/media/usb0/games/Amstrad/boot.e09
 MISTER_CORE=/media/fat/_Computer/Amstrad.rbf
 MISTER_MAIN=/media/fat/MiSTer
-CORE_RBF=build/remote/Amstrad.rbf
-MAIN_BIN=../Main_MiSTer/bin/MiSTer
+EC2_INSTANCE_ID=i-...
+AWS_REGION=eu-west-2
 ```
 
-Override these if your MiSTer uses different paths.
+`make install-main` stages the new Main binary as `MiSTer.new`, backs up the
+existing binary as `MiSTer.old`, then swaps the new binary into place.  Restart
+MiSTer after replacing Main.
 
-## Remote core build
+## Commands
 
-If your development machine cannot run Quartus, use an x86_64 remote builder.
-See `docs/remote_build.md` for the EC2/Docker workflow used to compile the
-modified `Amstrad_MiSTer` core.
-
-The custom Main_MiSTer binary is built locally with `make -C ../Main_MiSTer`;
-only the FPGA core build uses the remote Quartus builder.
-
-## Stage 3A M4S index loading
-
-This stage does not enumerate MiSTer's `shared` folder live. Instead, it uses
-the Amstrad core's existing menu file download mechanism to preload a small text
-index into FPGA RAM.
-
-1. Copy or create a plain text index file on MiSTer, for example:
-
-```text
-M4S INDEX
-README.TXT
-HELLO.BAS
-GAMES
-```
-
-2. Open the Amstrad core menu.
-3. Select `Load M4S index`.
-4. Choose the text file.
-5. In BASIC, run:
+Run `|about` on the CPC for the ROM's built-in command summary.
 
 ```basic
-|ls
+|about
+|cd[,"DIR"]
+|cp,"SRC","DST"
+|debug[,0|1]
+|diskread,"DISC"[,"SHARED"[,0]]
+|diskwrite,"SHARED"[,"DISC"]
+|exec,"FILE"
+|hexdump,"FILE"
+|loadm,"FILE"[,&ADDR]
+|ls[,"DIR"]
+|mkdir,"DIR"
+|mv,"OLD","NEW"
+|pwd
+|rm,"FILE"
+|savem,"FILE",&ADDR,&LEN
+|stat,"FILE"
+|type,"FILE"
 ```
 
-The index buffer is currently 2048 bytes and is treated as zero-terminated. If
-no index has been loaded, `|ls` prints `NO M4S INDEX`.
+### Shared Folder Commands
 
-## Stage 3B live shared folder listing
+- `|ls` lists the current shared directory.
+- `|ls,"DIR"` lists another shared directory without changing `|pwd`.
+- `|cd` returns to the shared-folder root.
+- `|cd,"DIR"` changes the current shared directory.
+- `|pwd` prints the current shared directory.
+- `|type,"FILE"` prints a text file, converting LF line endings for the CPC.
+- `|hexdump,"FILE"` prints file bytes as offset-prefixed hex.
+- `|stat,"FILE"` prints file size and AMSDOS header details when present.
+- `|loadm,"FILE"` loads raw bytes to `&4000`.
+- `|loadm,"FILE",&ADDR` loads raw bytes to an explicit address.
+- `|savem,"FILE",&ADDR,&LEN` saves a memory range to the shared folder.
+- `|exec,"FILE"` reads an AMSDOS header, prompts, loads, and jumps or prepares
+  a BASIC file for `RUN`.
+- `|mkdir,"DIR"` creates a shared directory.
+- `|mv,"OLD","NEW"` renames a shared file or directory.
+- `|cp,"SRC","DST"` copies within the shared folder.
+- `|rm,"FILE"` removes a shared file.
 
-With the matching custom Main_MiSTer binary installed, `|ls` asks Main_MiSTer
-to enumerate the configured shared folder and push a text listing into the core.
+Commands that create shared files refuse to overwrite an existing destination.
 
-The base folder follows Main_MiSTer's existing convention:
+### Disk Commands
 
-- `shared_folder=/absolute/path` uses that absolute path.
-- `shared_folder=relative/path` resolves below `HomeDir()`.
-- an empty `shared_folder` defaults to `HomeDir()/shared`.
-
-The folder is created if it does not already exist. The current listing format
-is deliberately simple:
-
-```text
-M4S SHARED
-FILE.BAS
-GAMES/
-```
-
-Directory names are suffixed with `/`. With no argument, `|ls` lists the current
-shared folder directory. With one string argument, it lists another shared
-folder path without changing the current directory:
+`|diskread` copies from the currently mounted AMSDOS disk into the shared
+folder:
 
 ```basic
-|ls,"GAMES"
-|ls,"../"
-|ls,"/GAMES/DIZZY"
+|diskread,"DISCFILE"
+|diskread,"DISCFILE","shared/path.bin"
+|diskread,"DISCFILE","shared/path.bin",0
 ```
 
-Directory path arguments use the same normalization rules as `|cd`. The listing
-is capped to the same 2048-byte index buffer as Stage 3A.
+By default, `|diskread` preserves the AMSDOS header in the shared copy.  Passing
+`0` as the third argument strips the header and writes only the payload.
+Existing shared destinations are refused.
 
-## Stage 4 shared-folder navigation
-
-The helper maintains a current directory relative to the configured `shared`
-folder. The current directory affects `|ls`, `|type`, `|hexdump`,
-`|stat`, `|loadm`, `|exec`, and `|savem`.
-
-Reset to the shared root:
+`|diskwrite` copies an AMSDOS-headered shared file to the currently mounted
+AMSDOS disk:
 
 ```basic
-|cd
+|diskwrite,"shared/path.bin"
+|diskwrite,"shared/path.bin","DISCFILE"
 ```
 
-Enter a child directory or nested path:
+The one-argument form uses the final component of the shared path as the disk
+filename.
+
+Both disk commands show percentage progress in normal mode.
+
+### Debug Mode
 
 ```basic
-|cd,"GAMES"
-|cd,"GAMES/DIZZY"
+|debug
+|debug,1
+|debug,0
 ```
 
-Move relative to the current folder:
-
-```basic
-|cd,".."
-|cd,"../TESTS"
-```
-
-Rooted paths are relative to the shared root:
-
-```basic
-|cd,"/GAMES"
-```
-
-The helper normalizes `.` and `..`, case-corrects existing directory names from
-the host filesystem, and rejects traversal above the shared root. To get back to
-root, run `|cd` with no arguments.
-
-## Stage 4A text file streaming
-
-With the matching custom Main_MiSTer binary and Amstrad core installed,
-`|type` reads a file from the resolved shared folder and prints it:
-
-```basic
-|type,"HELLO.TXT"
-|type,"../NOTES.TXT"
-```
-
-The command accepts relative paths, rooted paths relative to the shared root,
-and `..` traversal that stays inside the shared root. The response uses the same
-2048-byte stream buffer as the directory listing proof, and text output
-normalizes bare LF to CRLF for CPC display.
-
-## Stage 4B binary dump proof
-
-`|hexdump` reads a single file from the resolved shared folder and prints an
-ASCII hex dump:
-
-```basic
-|hexdump,"FILE.BIN"
-|hexdump,"../FILE.BIN"
-```
-
-The current mailbox stream is zero-terminated, so `|hexdump` does not stream raw
-binary bytes to the CPC yet. Main_MiSTer reads the binary file and formats the
-response as hex rows. The dump is capped by the same 2048-byte stream buffer.
-
-## Stage 4C AMSDOS file info
-
-`|stat` reads the first 128 bytes of a shared file and reports AMSDOS header
-metadata if the header checksum is valid:
-
-```basic
-|stat,"FILE.BIN"
-|stat,"../FILE.BIN"
-```
-
-When a valid AMSDOS header is present, the output includes the AMSDOS filename,
-file type byte, data length, load address, logical length, entry address, and
-real length. If the checksum does not match, the file is reported as headerless.
-
-## Stage 4D binary load proof
-
-`|loadm` loads a shared binary file into CPC RAM. With one argument it keeps
-the original proof default of `&4000`:
-
-```basic
-|loadm,"FILE.BIN"
-```
-
-With two arguments, the second argument is the destination address:
-
-```basic
-|loadm,"FILE.BIN",&8000
-|loadm,"../FILE.BIN",&7000
-```
-
-Main_MiSTer returns raw file chunks with a two-byte little-endian byte count
-followed by up to 512 bytes of data. Unlike the text commands, this response is
-length-aware and can carry `00` bytes. The current ROM command is still a proof:
-the request offset is 16-bit, and large files should be kept below the available
-CPC RAM range.
-
-## Stage 4E AMSDOS header load and run
-
-`|exec` is an opt-in diagnostic for real AMSDOS binaries:
-
-```basic
-|exec,"FILE.BIN"
-|exec,"../FILE.BIN"
-```
-
-It first prints the same metadata as `|stat`, then prompts:
-
-```text
-Load and CALL entry? Y/N
-```
-
-If confirmed with `Y`, Main_MiSTer verifies the AMSDOS header, skips the
-128-byte header, serves payload chunks, and the ROM writes them to the AMSDOS
-load address before jumping to the AMSDOS entry address. This can overwrite low
-memory and reset or crash the CPC if the program expects a different runtime
-environment.
-
-## Stage 4F raw memory save
-
-`|savem` writes a CPC memory range to the current shared folder:
-
-```basic
-|savem,"FILE.BIN",&4000,&0100
-|savem,"../FILE.BIN",&4000,&0100
-```
-
-The first numeric argument is the CPC source address and the second is the byte
-length. The ROM currently sends 64-byte chunks encoded as ASCII hex, which keeps
-the write proof compatible with the existing zero-terminated mailbox request
-buffer. Relative paths are resolved inside the shared root. Offset handling is
-still 16-bit, so this is a proof command rather than a general large-file save
-API.
-
-## Stage 4G create directories
-
-`|mkdir` creates one directory in the current shared folder:
-
-```basic
-|mkdir,"NEW"
-```
-
-The command currently accepts a single directory name only. Path separators and
-`..` are rejected, so creation is constrained to the current shared folder.
-
-## Stage 4H rename files or directories
-
-`|mv` renames one file or directory in the current shared folder:
-
-```basic
-|mv,"OLD.BIN","NEW.BIN"
-```
-
-The command refuses path separators, `..`, and existing destinations. It does
-not overwrite files.
-
-## Stage 4I copy files
-
-`|cp` copies one file within the shared folder:
-
-```basic
-|cp,"a.txt","b/a.txt"
-```
-
-Source and destination paths use the same shared-folder relative path rules as
-`|type`, `|loadm`, and `|savem`. The command refuses directories and existing
-destinations.
-
-## Stage 4J remove files
-
-`|rm` removes one file in the current shared folder:
-
-```basic
-|rm,"OLD.BIN"
-```
-
-The command refuses path separators, `..`, and directories. It is deliberately
-not recursive.
-
-## Stage 4K read files from disk
-
-`|diskread` copies one file from the currently selected AMSDOS disk into the
-shared folder:
-
-```basic
-|diskread,"DISCFILE.BIN","shared/discfile.bin"
-```
-
-The first argument is the CPC disk filename. The second argument is the shared
-folder destination path, resolved using the same relative path rules as `|cp`
-and `|savem`. The host refuses existing destinations. The current implementation
-uses the proven streaming path from AMSDOS' 2KB buffer to the shared folder in
-64-byte chunks, then closes the AMSDOS file and asks Main_MiSTer to prepend the
-saved 128-byte AMSDOS header. The shared output is therefore an AMSDOS-headered
-file by default while keeping the streaming behaviour needed for larger files.
-
-## Testing `|HELLO` in BASIC
-
-1. Build the ROM:
-
-```sh
-make
-```
-
-2. Copy `build/boot.eXX` to `games/Amstrad/` on MiSTer using the slot filename
-   you want to test, for example `boot.e09`.
-3. Start or reset the Amstrad core.
-4. Confirm the boot screen includes ` M4S ROM Stage 4.14 installed` followed by a
-   blank line.
-5. At the BASIC prompt, type:
-
-```basic
-|HELLO
-```
-
-Expected output:
-
-```text
-M4S ROM OK
-```
-
-If BASIC reports an unknown command, debug ROM loading, slot selection, and the
-ROM prefix before looking at any future mailbox work.
-
-## Stage 2 notes
-
-Stage 2 should add the simplest possible CPC-to-core mailbox path, still without
-host filesystem access. The ROM can then grow a second command such as `|ls`
-that requests a hardcoded response from FPGA-side logic.
-
-Keep the boundary clear:
-
-- The current Stage 1 ROM must not touch mailbox ports.
-- The proposed mailbox ports stay documented in `docs/protocol.md`.
-- Host filesystem enumeration belongs after the mock mailbox is working.
-
-## Repository layout
-
-```text
-rtl/m4s_mailbox.sv           FPGA-side command/status/data mailbox scaffold
-rtl/m4s_hps_ext.sv           FPGA-side HPS directory index receiver
-rom/m4s_rom.asm              CPC expansion ROM
-rom/m4s_protocol.inc         Future Z80-side protocol constants
-Makefile                     ROM build and install rules
-scripts/build_rom.sh         Compatibility wrapper around make
-docs/protocol.md             CPC <-> FPGA mailbox protocol proposal
-codex/implementation_plan.md Detailed implementation checklist
-tests/manual_test_plan.md    Manual smoke tests on MiSTer
-```
+Debug mode is off by default.  It currently enables extra `|diskread`
+diagnostics such as AMSDOS open/header/done/remaining counters.
+
+## Known Limits
+
+- This is an explicit RSX shared-folder system, not transparent AMSDOS drive
+  integration.
+- It is not currently M4 ROM compatible and does not provide SymbOS mass
+  storage compatibility.
+- No wildcard or recursive operations yet.
+- Some operations use 16-bit CPC-side offsets or lengths.
+- `|exec` deliberately jumps into loaded CPC code; bad or incompatible binaries
+  can reset or crash the CPC.
+- Some host-side disk tools, including `iDSK` in earlier testing, may not be a
+  reliable verifier for large files.  Prefer CPC `CAT`/`RUN` and ROM
+  diskread/diskwrite round trips when testing.
+
+## Tester Checklist
+
+1. Boot the modified core and confirm the stage 4.14 sign-on appears.
+2. Run `|about` and confirm the command list is readable.
+3. Create files in `shared`, then run `|ls`, `|cd`, and `|pwd`.
+4. Try `|type`, `|hexdump`, and `|stat` on text, binary, headered, and
+   headerless files.
+5. Try `|mkdir`, `|cp`, `|mv`, and `|rm`, including overwrite refusal.
+6. Try `|savem` and `|loadm` with a small known memory pattern.
+7. Try `|diskread` from a mounted disk into `shared`.
+8. Try `|exec` on the copied file if it is an executable AMSDOS binary.
+9. Try `|diskwrite` to a blank disk and verify with CPC `CAT` or `RUN`.
+10. Report the exact command, screen output, file names, and whether debug mode
+    was enabled for any failure.
