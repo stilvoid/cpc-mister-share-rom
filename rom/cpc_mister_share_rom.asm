@@ -29,8 +29,7 @@
 ;     |stat,"FILE.BIN"
 ;     |type,"FILE.TXT"
 ;
-; Running |ls reads a directory text stream from the experimental FPGA
-; mailbox ports.
+; Commands use a small mailbox exposed by the matching Amstrad MiSTer core.
 
         include "cpc_mister_share_protocol.inc"       ; Mailbox port and command constants.
 
@@ -85,8 +84,8 @@ CMS_PROGRESS_DONE equ &9821              ; Completed 2KB progress blocks.
 ;
 ; Byte 0: ROM type.  1 means background ROM.
 ; Byte 1: ROM mark number.  Project-specific; 0 is fine for this experiment.
-; Byte 2: version number.  Stage 1 uses version 1.
-; Byte 3: modification level.  0 for the first Stage 1 build.
+; Byte 2: version number.
+; Byte 3: modification level.
 ; Byte 4-5: address of the command name table.
 ; Byte 6 onward: three-byte JP entries, one per command name.
 ; ---------------------------------------------------------------------------
@@ -212,9 +211,8 @@ rsx_debug_off:
 ; ---------------------------------------------------------------------------
 ; |ls RSX implementation.
 ;
-; Stage 2 proves the Z80-to-FPGA mailbox by issuing DIR_BEGIN and printing the
-; returned zero-terminated byte stream.  The FPGA currently supplies hardcoded
-; mock data.
+; Asks Main_MiSTer for a live shared-folder listing and prints the returned
+; zero-terminated byte stream.
 ; ---------------------------------------------------------------------------
 rsx_ls:
         cp 0
@@ -424,9 +422,8 @@ rsx_pwd_no_params:
 ; ---------------------------------------------------------------------------
 ; |type,"filename" RSX implementation.
 ;
-; This is a small Stage 4 proof of concept.  It sends a single filename string
-; to the FPGA mailbox, asks Main_MiSTer to read it from the shared folder, and
-; prints the returned byte stream.
+; Sends a single filename request to Main_MiSTer and prints the returned byte
+; stream.
 ; ---------------------------------------------------------------------------
 rsx_type:
         cp 1
@@ -1212,7 +1209,7 @@ import_save_header:
         ld bc, 69
         ldir
         pop hl
-        ld de, &00D4                     ; M4 ROM: (0xE4-0x55)+69.
+        ld de, &00D4                     ; AMSDOS stores header tail separately.
         add hl, de
         ld de, CMS_IMPORT_HEADER + 69
         ld bc, 59
@@ -1330,9 +1327,9 @@ import_load_buffer_base:
         pop de
         ret
 
-; Prepare AMSDOS for another buffered read. This mirrors the M4 ROM's copy
-; path: point the private buffer index to the end of the next requested block
-; and clear the buffered byte count, so CAS_IN_CHAR refills the 2KB buffer.
+; Prepare AMSDOS for another buffered read: point the private buffer index to
+; the end of the next requested block and clear the buffered byte count, so
+; CAS_IN_CHAR refills the 2KB buffer.
 import_prepare_next_read:
         push hl
         push de
@@ -1384,9 +1381,7 @@ rsx_import_create_error:
 ; ---------------------------------------------------------------------------
 ; |diskwrite,"shared/path"[,"discfile"] RSX implementation.
 ;
-; Streams a shared-folder file to the currently selected AMSDOS disk.  This first
-; pass writes raw bytes through CAS_OUT_CHAR; AMSDOS header handling can be added
-; once the byte stream path is proven on real hardware.
+; Streams an AMSDOS-headered shared-folder file to the currently selected disk.
 ; ---------------------------------------------------------------------------
 rsx_diskwrite:
         cp 1
@@ -1895,9 +1890,9 @@ import_send_chunk_data:
 ; ---------------------------------------------------------------------------
 ; |savem,"filename",&addr,&length RSX implementation.
 ;
-; Stage 4 write proof.  This saves a CPC memory range to a file in the current
-; shared folder.  The CPC sends 64-byte chunks encoded as ASCII hex so the
-; current zero-terminated mailbox request framing can carry arbitrary bytes.
+; Saves a CPC memory range to a file in the current shared folder. The CPC sends
+; 64-byte chunks encoded as ASCII hex so the zero-terminated mailbox request
+; framing can carry arbitrary bytes.
 ; ---------------------------------------------------------------------------
 rsx_savem:
         cp 3
@@ -1969,7 +1964,7 @@ rsx_savem_advance:
         or c
         jr z, rsx_savem_done
 
-        ld a, d                          ; Stop if the 16-bit proof offset
+        ld a, d                          ; Stop if the 16-bit transfer offset
         or e                             ; wraps around at 64KB.
         jr z, rsx_savem_error
 
@@ -1991,9 +1986,9 @@ rsx_savem_done:
 ; ---------------------------------------------------------------------------
 ; |loadm,"filename" RSX implementation.
 ;
-; Stage 4 proof of raw binary transfer.  This loads a file from the shared
-; folder into CPC RAM at &4000 in 512-byte chunks.  Each chunk response starts
-; with a little-endian 16-bit byte count followed by raw file data.
+; Loads a shared-folder file into CPC RAM at &4000, or an explicit address, in
+; 512-byte chunks. Each response starts with a little-endian 16-bit byte count
+; followed by raw file data.
 ; ---------------------------------------------------------------------------
 rsx_loadm:
         cp 1
@@ -2084,7 +2079,7 @@ rsx_loadm_write_loop:
         or c
         jr nz, rsx_loadm_write_loop
 
-        ld a, d                          ; Stop if the 16-bit proof offset
+        ld a, d                          ; Stop if the 16-bit transfer offset
         or e                             ; wraps around at 64KB.
         jr z, rsx_loadm_done
 
