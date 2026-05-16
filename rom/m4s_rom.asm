@@ -1429,11 +1429,12 @@ rsx_diskwrite_count_valid:
         cp 3
         jp nc, rsx_diskwrite_close_error ; Refuse counts above 512 bytes.
         cp 2
-        jr nz, rsx_diskwrite_count_valid
+        jr nz, rsx_diskwrite_count_checked
         ld a, c
         or a
         jp nz, rsx_diskwrite_close_error
 
+rsx_diskwrite_count_checked:
         ld a, b
         or c
         jp z, rsx_diskwrite_close_done
